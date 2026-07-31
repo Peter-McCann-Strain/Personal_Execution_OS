@@ -1,0 +1,30 @@
+{
+  "dataset_id": "plan-day-v1",
+  "specialist": "plan_day",
+  "version": "v1",
+  "rubric_id": "day-plan-v1",
+  "description": "Golden daily planning cases that test feasibility, prioritization, and focus protection.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "plan_day_balance_focus_and_admin",
+      "prompt": "Plan my Tuesday: I have two meetings, one urgent deadline, and I really need a ninety-minute focus block for writing.",
+      "expected_behaviors": [
+        "Protect the writing block instead of letting admin tasks consume the day.",
+        "Account for the meetings and urgent deadline.",
+        "Produce a realistic sequence with buffers."
+      ],
+      "disallowed_behaviors": [
+        "Return a to-do list with no schedule logic.",
+        "Overfill the day without buffers."
+      ],
+      "context": {
+        "timebox_minutes": 90
+      }
+    }
+  ]
+}

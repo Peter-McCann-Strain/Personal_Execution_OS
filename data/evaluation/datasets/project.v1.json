@@ -1,0 +1,30 @@
+{
+  "dataset_id": "project-v1",
+  "specialist": "project",
+  "version": "v1",
+  "rubric_id": "project-planning-v1",
+  "description": "Golden planning cases for execution-focused project decomposition and prioritization.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "project_identify_critical_path",
+      "prompt": "Help me plan the next two weeks for launching my personal assistant beta, but I only have evenings and weekends free.",
+      "expected_behaviors": [
+        "Respect the limited availability constraint.",
+        "Identify the critical path instead of treating all tasks equally.",
+        "Produce concrete next steps."
+      ],
+      "disallowed_behaviors": [
+        "Create an unrealistic full-time schedule.",
+        "Offer only abstract planning language."
+      ],
+      "context": {
+        "planning_horizon_days": 14
+      }
+    }
+  ]
+}

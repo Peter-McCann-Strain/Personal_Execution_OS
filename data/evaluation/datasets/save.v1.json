@@ -1,0 +1,30 @@
+{
+  "dataset_id": "save-v1",
+  "specialist": "save",
+  "version": "v1",
+  "rubric_id": "save-handler-v1",
+  "description": "Golden capture cases for durable preferences, commitments, and structured memory extraction.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "save_preference_not_smalltalk",
+      "prompt": "Please remember that I do my best writing between 7 and 10 in the morning, but ignore the rest of my rambling here.",
+      "expected_behaviors": [
+        "Capture the durable preference about writing time.",
+        "Avoid storing clearly ephemeral filler.",
+        "Preserve enough structure for later retrieval."
+      ],
+      "disallowed_behaviors": [
+        "Store transient chatter as memory.",
+        "Miss the explicit preference."
+      ],
+      "context": {
+        "memory_type": "preference"
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "dataset_id": "socratic-v1",
+  "specialist": "socratic",
+  "version": "v1",
+  "rubric_id": "socratic-tutorial-v1",
+  "description": "Golden tutoring cases for Bloom progression, teaching quality, and misconception handling.",
+  "thresholds": {
+    "minimum_pass_rate": 0.96,
+    "minimum_average_score": 0.91,
+    "max_regression": 0.02
+  },
+  "cases": [
+    {
+      "id": "socratic_probe_before_explaining",
+      "prompt": "I sort of get what vector embeddings are, but I can't explain why they help retrieval. Teach me without just dumping the answer.",
+      "expected_behaviors": [
+        "Start by probing the learner's current model.",
+        "Use questions or scaffolding instead of immediately giving a full explanation.",
+        "Move the learner toward deeper understanding at an appropriate level."
+      ],
+      "disallowed_behaviors": [
+        "Dump a lecture without checking understanding.",
+        "Jump to advanced theory before grounding basics."
+      ],
+      "context": {
+        "learning_goal": "understand"
+      }
+    }
+  ]
+}

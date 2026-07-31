@@ -1,0 +1,30 @@
+{
+  "dataset_id": "review-v1",
+  "specialist": "review",
+  "version": "v1",
+  "rubric_id": "review-analysis-v1",
+  "description": "Golden code and system review cases focused on real findings, severity, and grounding.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "review_focus_on_real_regression",
+      "prompt": "Review this change and prioritize any behavioral regressions in the chat flow.",
+      "expected_behaviors": [
+        "Lead with findings, not summary.",
+        "Prioritize by severity and user impact.",
+        "Ground each finding in concrete behavior or contract mismatch."
+      ],
+      "disallowed_behaviors": [
+        "Spend most of the review on stylistic nits.",
+        "Report speculative bugs without a plausible failure path."
+      ],
+      "context": {
+        "mode": "code_review"
+      }
+    }
+  ]
+}

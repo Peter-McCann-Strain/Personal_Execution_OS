@@ -1,0 +1,30 @@
+{
+  "dataset_id": "communications-v1",
+  "specialist": "communications",
+  "version": "v1",
+  "rubric_id": "communications-draft-v1",
+  "description": "Golden communication drafting cases for tone match, professional quality, and intent preservation.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "communications_match_relationship_tone",
+      "prompt": "Draft a warm but concise note to a close collaborator letting them know I need to push our check-in to Friday because of a family commitment.",
+      "expected_behaviors": [
+        "Keep the draft warm and human.",
+        "Preserve the user's core message and constraint.",
+        "Make the draft ready to send with minimal editing."
+      ],
+      "disallowed_behaviors": [
+        "Sound robotic or overly formal.",
+        "Drop the reason or the rescheduling request."
+      ],
+      "context": {
+        "channel": "email"
+      }
+    }
+  ]
+}

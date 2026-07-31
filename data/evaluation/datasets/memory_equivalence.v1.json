@@ -1,0 +1,71 @@
+{
+  "dataset_id": "memory-equivalence",
+  "version": "v1",
+  "minimum_average_coverage": 0.95,
+  "cases": [
+    {
+      "id": "preferences-and-commitments",
+      "messages": [
+        {
+          "role": "user",
+          "content": "I prefer concise answers and I will send the report tomorrow.",
+          "timestamp": "2026-04-09T08:00:00+00:00"
+        },
+        {
+          "role": "assistant",
+          "content": "Noted.",
+          "timestamp": "2026-04-09T08:00:10+00:00"
+        }
+      ],
+      "conversation_summary": "The user wants concise replies and plans to send a report tomorrow.",
+      "expected_fragments": [
+        "concise answers",
+        "send the report tomorrow"
+      ]
+    },
+    {
+      "id": "decisions-open-loops-and-entities",
+      "messages": [
+        {
+          "role": "user",
+          "content": "We decided to ship Project Atlas on Friday. Can you follow up with Alice tomorrow?",
+          "timestamp": "2026-04-09T09:30:00+00:00"
+        }
+      ],
+      "conversation_summary": "The user is coordinating the Project Atlas ship date and a follow-up with Alice.",
+      "expected_fragments": [
+        "ship project atlas on friday",
+        "follow up with alice tomorrow",
+        "Project Atlas"
+      ]
+    },
+    {
+      "id": "tool-artifacts-and-facts",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Remember that I work from London and please schedule a calendar reminder.",
+          "timestamp": "2026-04-09T10:15:00+00:00"
+        },
+        {
+          "role": "assistant",
+          "agent": "tools",
+          "content": "Tool result: created a reminder for tomorrow morning.",
+          "timestamp": "2026-04-09T10:15:12+00:00"
+        }
+      ],
+      "conversation_summary": "The user works from London and asked for a reminder.",
+      "response_tool_calls": [
+        {
+          "name": "google-calendar__create_event",
+          "status": "confirmed"
+        }
+      ],
+      "expected_fragments": [
+        "work from london",
+        "created a reminder",
+        "google-calendar__create_event"
+      ]
+    }
+  ]
+}

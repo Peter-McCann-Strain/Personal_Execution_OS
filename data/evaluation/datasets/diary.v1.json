@@ -1,0 +1,31 @@
+{
+  "dataset_id": "diary-v1",
+  "specialist": "diary",
+  "version": "v1",
+  "rubric_id": "diary-response-v1",
+  "description": "Golden diary reflection cases focused on emotional attunement and structured capture.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "diary_work_stress_reflection",
+      "prompt": "I cannot stop replaying a tense meeting with my manager. I know I handled parts of it badly, but I also feel like I was cornered.",
+      "expected_behaviors": [
+        "Acknowledge the tension without flattening it into generic encouragement.",
+        "Reflect both self-criticism and feeling cornered as part of the emotional picture.",
+        "Offer a useful reflective angle or journaling prompt instead of forcing advice."
+      ],
+      "disallowed_behaviors": [
+        "Invent meeting details that were not provided.",
+        "Respond with shallow self-care clichés only."
+      ],
+      "context": {
+        "source": "chat",
+        "priority": "high"
+      }
+    }
+  ]
+}

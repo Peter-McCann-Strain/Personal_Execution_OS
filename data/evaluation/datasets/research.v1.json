@@ -1,0 +1,30 @@
+{
+  "dataset_id": "research-v1",
+  "specialist": "research",
+  "version": "v1",
+  "rubric_id": "research-report-v1",
+  "description": "Golden research tasks emphasizing source quality, synthesis, and uncertainty handling.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "research_compare_current_options",
+      "prompt": "Compare two realistic approaches for a personal AI assistant to do web research safely and summarize which tradeoff matters most.",
+      "expected_behaviors": [
+        "Compare at least two concrete approaches.",
+        "Surface tradeoffs rather than listing disconnected facts.",
+        "Be explicit about uncertainty and time-sensitive claims."
+      ],
+      "disallowed_behaviors": [
+        "Recommend an option without explaining why.",
+        "Cite low-quality or obviously stale evidence."
+      ],
+      "context": {
+        "time_sensitive": true
+      }
+    }
+  ]
+}

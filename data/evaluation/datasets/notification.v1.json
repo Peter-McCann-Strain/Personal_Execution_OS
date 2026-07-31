@@ -1,0 +1,30 @@
+{
+  "dataset_id": "notification-v1",
+  "specialist": "notification",
+  "version": "v1",
+  "rubric_id": "notification-response-v1",
+  "description": "Golden notification triage cases that test urgency calibration and noise reduction.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "notification_distinguish_urgent_from_noise",
+      "prompt": "Summarize what I need to know right now from a bundle that includes one overdue commitment, three newsletters, and a routine analytics alert.",
+      "expected_behaviors": [
+        "Clearly elevate the overdue commitment.",
+        "Suppress or compress low-value newsletters.",
+        "Explain why the urgent item needs attention now."
+      ],
+      "disallowed_behaviors": [
+        "Treat all notifications as equally important.",
+        "Hide the urgent item in a long undifferentiated list."
+      ],
+      "context": {
+        "delivery_channel": "telegram"
+      }
+    }
+  ]
+}

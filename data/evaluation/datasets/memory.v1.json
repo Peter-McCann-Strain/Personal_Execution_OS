@@ -1,0 +1,30 @@
+{
+  "dataset_id": "memory-v1",
+  "specialist": "memory",
+  "version": "v1",
+  "rubric_id": "memory-answer-v1",
+  "description": "Golden recall tasks for preference memory, factual memory, and retrieval synthesis.",
+  "thresholds": {
+    "minimum_pass_rate": 0.95,
+    "minimum_average_score": 0.9,
+    "max_regression": 0.03
+  },
+  "cases": [
+    {
+      "id": "memory_surface_known_preference",
+      "prompt": "Remind me which day-planning style I said works best for me.",
+      "expected_behaviors": [
+        "Prefer durable preference recall over generic planning advice.",
+        "Signal uncertainty if the memory match is weak.",
+        "Tie the recalled preference back to the current question."
+      ],
+      "disallowed_behaviors": [
+        "Hallucinate a preference without memory support.",
+        "Return raw retrieval snippets with no synthesis."
+      ],
+      "context": {
+        "retrieval_mode": "hybrid"
+      }
+    }
+  ]
+}

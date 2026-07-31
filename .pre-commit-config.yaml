@@ -1,0 +1,40 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+        # The generated OpenAPI contract and reproducible Python lockfile are
+        # reviewed release artifacts. Keep the general ceiling at 1 MiB.
+        args: ["--maxkb=1024"]
+      - id: check-case-conflict
+      - id: check-json
+        # TypeScript config files use JSON-with-comments syntax.
+        exclude: ^frontend/tsconfig(?:\.app|\.node)?\.json$
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 39d9ac5938dadb73df0564a45f163e25ff9fa6e2 # v0.16.1
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: public-release-audit
+        name: public release privacy audit
+        entry: python scripts/public_release_audit.py --root .
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -1,0 +1,225 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: test
+      LOG_LEVEL: WARNING
+      LLM_PROVIDER: disabled
+      ANTHROPIC_API_KEY: ""
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+      REDIS_URL: redis://localhost:6379/0
+      CHAT_API_KEY: test-chat-api-key
+      TELEGRAM_BOT_TOKEN: test-value
+      TELEGRAM_ALLOWED_USER_IDS: "100001"
+      TELEGRAM_WEBHOOK_URL: https://example.com/webhook
+      TELEGRAM_WEBHOOK_SECRET: test-value
+      OLLAMA_HOST: ""
+      OTEL_ENABLED: "false"
+      WEB_PUSH_PUBLIC_KEY: ""
+      WEB_PUSH_PRIVATE_KEY: ""
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run ty check --exit-zero-on-warning
+      - run: uv run bandit -q -c pyproject.toml -r src/app
+      - run: sh -n scripts/*.sh
+      - name: Audit locked production dependencies
+        run: |
+          uv export --frozen --no-dev --no-emit-project \
+            --format requirements-txt --output-file /tmp/production-requirements.txt
+          uv run pip-audit --strict --requirement /tmp/production-requirements.txt
+      - run: uv run python -m scripts.export_openapi --check
+      - run: uv run python -m scripts.evaluate validate-assets
+      - run: uv run pytest tests/unit tests/integration --tb=short
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run audit:high
+      - working-directory: frontend
+        run: npm run format:check
+      - working-directory: frontend
+        run: npm run lint
+      - working-directory: frontend
+        run: npm run test
+      - working-directory: frontend
+        run: npm run build
+      - name: Install pinned Chromium runtime
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run full browser suite
+        working-directory: frontend
+        run: npm run test:e2e -- --project=chromium
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      POSTGRES_PASSWORD: ci-only-postgres-password-7db1382d
+      CONNECTOR_TOKEN_ENCRYPTION_KEY: ci-only-connector-key-b30194bd
+      LLM_PROVIDER: disabled
+      OTEL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Prepare private runtime identity
+        run: |
+          cp .env.example .env
+          chmod 600 .env
+          cp config/IDENTITY.example.md config/IDENTITY.local.md
+          printf '\nPrivate sentinel: PEOS_PRIVATE_IDENTITY_SENTINEL_7D5B2A1C\n' \
+            >> config/IDENTITY.local.md
+          chmod 600 config/IDENTITY.local.md
+      - name: Validate and build Compose stack
+        run: |
+          docker compose config --quiet
+          docker compose build
+      - name: Prove private identity is absent from images
+        run: |
+          if docker history --no-trunc personal-execution-os-api:latest \
+            | grep --quiet PEOS_PRIVATE_IDENTITY_SENTINEL_7D5B2A1C; then
+            echo "Private identity appeared in backend image history" >&2
+            exit 1
+          fi
+          image_archive=$(mktemp)
+          trap 'rm -f "$image_archive"' EXIT
+          docker save \
+            personal-execution-os-api:latest \
+            personal-execution-os-web:latest >"$image_archive"
+          if grep --text --quiet \
+            PEOS_PRIVATE_IDENTITY_SENTINEL_7D5B2A1C "$image_archive"; then
+            echo "Private identity appeared in an image layer" >&2
+            exit 1
+          fi
+      - name: Start and exercise first-run authentication
+        run: |
+          ./scripts/start.sh
+          curl --fail --silent --show-error \
+            http://127.0.0.1:8080/readyz >/dev/null
+          hostile_status=$(
+            curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header 'Host: attacker.example' \
+              --header 'Origin: http://attacker.example' \
+              http://127.0.0.1:8080/api/setup/status
+          )
+          test "$hostile_status" = "421"
+          docker compose exec -T api sh -ec \
+            'probe=/var/lib/personal-execution-os/.ci-write-probe; : > "$probe"; test -w "$probe"'
+          curl --fail --silent --show-error \
+            http://127.0.0.1:8080/api/setup/status \
+            | jq --exit-status '.initialized == false' >/dev/null
+          curl --fail --silent --show-error \
+            --cookie-jar /tmp/peos-cookies.txt \
+            --header 'Content-Type: application/json' \
+            --data '{"password":"CI-only-owner-password-8F6A1D2C"}' \
+            http://127.0.0.1:8080/api/setup/initialize \
+            | jq --exit-status '.authenticated == true' >/dev/null
+          curl --fail --silent --show-error \
+            --cookie /tmp/peos-cookies.txt \
+            http://127.0.0.1:8080/api/account/me \
+            | jq --exit-status '.role == "owner"' >/dev/null
+          curl --fail --silent --show-error --head \
+            http://127.0.0.1:8080/sw.js \
+            | grep --ignore-case '^cache-control:.*no-cache' >/dev/null
+          asset_path=$(
+            docker compose exec -T web \
+              find /usr/share/nginx/html/assets -type f \
+              | head -n 1 \
+              | sed 's#^/usr/share/nginx/html##'
+          )
+          curl --fail --silent --show-error --head \
+            "http://127.0.0.1:8080${asset_path}" \
+            | grep --ignore-case '^cache-control:.*immutable' >/dev/null
+          ./scripts/backup-database.sh /tmp/personal-execution-os-ci.dump
+          ./scripts/restore-database.sh \
+            /tmp/personal-execution-os-ci.dump \
+            --confirm-destroy-local-data
+          curl --fail --silent --show-error \
+            --cookie /tmp/peos-cookies.txt \
+            http://127.0.0.1:8080/api/auth/session \
+            | jq --exit-status '.authenticated == true' >/dev/null
+      - name: Scan final application images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: personal-execution-os-api:latest
+          format: table
+          severity: HIGH,CRITICAL
+          scanners: vuln
+          ignore-unfixed: false
+          exit-code: "1"
+      - name: Scan final web image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: personal-execution-os-web:latest
+          format: table
+          severity: HIGH,CRITICAL
+          scanners: vuln
+          ignore-unfixed: false
+          exit-code: "1"
+      - name: Generate backend SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: personal-execution-os-api:latest
+          format: cyclonedx
+          output: personal-execution-os-api.cdx.json
+          scanners: vuln
+          exit-code: "0"
+      - name: Generate web SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: personal-execution-os-web:latest
+          format: cyclonedx
+          output: personal-execution-os-web.cdx.json
+          scanners: vuln
+          exit-code: "0"
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: container-sboms
+          path: |
+            personal-execution-os-api.cdx.json
+            personal-execution-os-web.cdx.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Tear down disposable stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  release-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - run: python scripts/public_release_audit.py --root . --tracked-only --git-metadata

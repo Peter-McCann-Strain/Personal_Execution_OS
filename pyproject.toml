@@ -1,0 +1,158 @@
+[project]
+name = "personal-execution-os"
+version = "0.1.0"
+description = "Self-hosted workspace for planning, commitments, reflection, and optional AI assistance"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.15",
+    "pydantic>=2.11",
+    "pydantic-settings>=2.8",
+    "anthropic>=0.49",
+    "argon2-cffi>=23.1",
+    "structlog>=25.1",
+    "sentry-sdk[fastapi]>=2.0",
+    "httpx>=0.28",
+    "redis>=5.0",
+    "aiogram>=3.20",
+    "langgraph>=1.1.0",
+    "arq>=0.26",
+    "tenacity>=9.0",
+    "pgvector>=0.3",
+    "jsonschema>=4.23",
+    # Content curation (RSS feeds)
+    "feedparser>=6.0",
+    # Chart generation (mood/energy/habit visualizations)
+    "plotly>=6.0",
+    "kaleido>=0.4",
+    # Google auth (Calendar + Gmail OAuth)
+    "google-auth>=2.0",
+    "google-auth-oauthlib>=1.0",
+    # Browser push delivery (VAPID / Web Push)
+    "pywebpush>=2.0",
+    # OpenTelemetry — optional runtime dependency. The instrumentation in
+    # src/app/core/otel.py is a no-op when OTEL_EXPORTER_OTLP_ENDPOINT is
+    # empty, but the imports still need to resolve so we keep these in the
+    # main dependency set. Versions follow the April 2026 GenAI semconv
+    # (Development status — requires OTEL_SEMCONV_STABILITY_OPT_IN).
+    "opentelemetry-api>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "opentelemetry-instrumentation-asgi>=0.49b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "pyjwt[crypto]>=2.10",
+]
+
+[project.scripts]
+mutation-gate = "scripts.mutation_gate:main"
+provider-readiness = "scripts.provider_readiness:main"
+smoke-api = "scripts.smoke_api:main"
+smoke-release = "scripts.smoke_release:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pytest-httpx>=0.35",
+    "httpx>=0.28",
+    "ruff>=0.11",
+    "ty>=0.0.1a0",
+    "bandit>=1.8",
+    # Used by dataset curation (KMeans clustering for diversity sampling).
+    # Kept as dev-only: curation runs in the worker image which installs
+    # the [eval] extra; unit tests mock sklearn so the dev install is enough.
+    "scikit-learn>=1.4",
+]
+# Runtime eval dependencies — included in the worker Docker image.
+eval = [
+    "scikit-learn>=1.4",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "N", "UP", "B", "SIM", "RUF",
+    "ASYNC",  # async best practices
+    "S",      # flake8-bandit security checks
+    "T20",    # no print() in production code
+    "PIE",    # misc lints (no-op expressions, etc.)
+    "PT",     # pytest style
+    "RET",    # return statement cleanliness
+    "TCH",    # TYPE_CHECKING import optimisation
+    "PERF",   # performance anti-patterns
+    "FURB",   # modernise code patterns
+    "LOG",    # logging best practices
+]
+ignore = [
+    "B008",    # Depends() in FastAPI signatures is the standard pattern
+    "UP047",   # TypeVar vs PEP 695 — conflicts with `from __future__ import annotations`
+    "S101",    # assert is fine in non-production code
+    "S105",    # false positives on variable names containing "secret"/"token"
+    "S106",    # false positives on password= kwargs in tests
+    "S603",    # subprocess calls are not used
+    "RET504",  # unnecessary variable before return is sometimes clearer
+    "PT012",   # pytest.raises block can contain multiple statements for clarity
+    "TCH",     # TYPE_CHECKING import optimization — defer until stable
+    "TC",      # TYPE_CHECKING import optimization — defer until stable
+    "PERF401", # list.extend vs append loop — not always clearer
+    "S608",    # false positive on parameterized SQL with format-based branch selection
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Prompt files contain natural-language examples with long lines
+"src/app/agents/prompts/*.py" = ["E501"]
+"src/app/agents/socratic/prompts/*.py" = ["E501"]
+# Test files have long mock setup lines and test-specific patterns
+"tests/**/*.py" = ["E501", "S", "PERF"]
+# Scripts are CLI tools — print() is expected
+"scripts/**/*.py" = ["T201"]
+# Entry points bind to 0.0.0.0 intentionally
+"main.py" = ["S104"]
+# Alembic-generated migrations have long DDL/SQL lines that read better unwrapped
+"src/app/persistence/migrations/versions/*.py" = ["E501"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    "B101",  # assert used in tests only
+    "B105",  # false positives on URLs and env-var-name dict keys (matches ruff S105 ignore)
+    "B608",  # false positive on parameterized SQL with format-based branch selection (matches ruff S608)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.151.11",
+    "pip-audit>=2.9.0",
+    "pre-commit>=4.6.0",
+    # MCP is disabled in the public runtime. Keep the SDK only for tests of
+    # dormant compatibility code until that code is removed.
+    "mcp>=1.0",
+    # Real-Postgres integration tests: spin a pgvector/pgvector:pg16 container per session.
+    # testcontainers-python 4.x ships with a PostgresContainer module; we use the plain
+    # postgres extra and swap in the pgvector image at runtime.
+    "testcontainers[postgres]>=4.9",
+    # psycopg (v3) is required by testcontainers' PostgresContainer for its readiness probe.
+    "psycopg[binary]>=3.2",
+    # Schemathesis v4 fuzzes every route in the FastAPI openapi.json as a CI gate.
+    "schemathesis>=4,<5",
+]

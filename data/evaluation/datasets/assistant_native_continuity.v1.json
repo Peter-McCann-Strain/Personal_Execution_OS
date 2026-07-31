@@ -1,0 +1,197 @@
+{
+  "dataset_id": "assistant_native_continuity.v1",
+  "version": "v1",
+  "description": "Deterministic replay cases for assistant-native retries, note references, and ambiguity handling.",
+  "thresholds": {
+    "minimum_pass_rate": 1.0,
+    "minimum_case_count": 6,
+    "minimum_baseline_lift": 0.5
+  },
+  "cases": [
+    {
+      "id": "retry_pending_save_note",
+      "description": "A direct 'try again' should replay the pending failed save-note action.",
+      "message_content": "Try again",
+      "pending_action": {
+        "action_id": "action-pending-save-note",
+        "action_type": "save_note",
+        "status": "failed",
+        "human_summary": "Retry save note: Add a graph-based note organisation system like Obsidian.",
+        "normalized_payload": {
+          "note_payload": "Add a graph-based note organisation system like Obsidian.",
+          "original_text": "Also i want to add a note prganisation system so you work on a graph based structure like obsodian. Add that to notes also"
+        },
+        "idempotency_key": "save_note:pending-graph",
+        "retryable": true,
+        "last_error": "note_capture_parse_failed",
+        "specialist": "save"
+      },
+      "expected_resolution_type": "retry_pending_action",
+      "expected_forced_specialist": "save",
+      "expected_rewritten_content_contains": [
+        "Try again"
+      ],
+      "expected_clarification_requested": false,
+      "expected_matched_action_type": "save_note"
+    },
+    {
+      "id": "retry_recent_failed_artifact",
+      "description": "If Redis state is gone but one failed assistant-native action exists in artifacts, retry it.",
+      "message_content": "try again",
+      "recent_actions": [
+        {
+          "action_id": "action-artifact-save-note",
+          "action_type": "save_note",
+          "status": "failed",
+          "human_summary": "Retry save note: Create all NotebookLM podcast tasks for papers and case studies.",
+          "normalized_payload": {
+            "note_payload": "Create all NotebookLM podcast tasks for papers and case studies.",
+            "original_text": "Also add to my nltes i need to creat all the notebook LM podcasts for the papers and casestudies of products"
+          },
+          "idempotency_key": "save_note:artifact-podcasts",
+          "retryable": true,
+          "last_error": "note_capture_upstream_failed",
+          "specialist": "save"
+        }
+      ],
+      "expected_resolution_type": "retry_recent_artifact",
+      "expected_forced_specialist": "save",
+      "expected_clarification_requested": false,
+      "expected_matched_action_type": "save_note"
+    },
+    {
+      "id": "ambiguous_retry_multiple_failures",
+      "description": "Multiple recent failed assistant-native actions should trigger one short clarification question.",
+      "message_content": "retry",
+      "recent_actions": [
+        {
+          "action_id": "action-failed-note",
+          "action_type": "save_note",
+          "status": "failed",
+          "human_summary": "Retry save note: Graph notes system",
+          "normalized_payload": {
+            "note_payload": "Graph notes system",
+            "original_text": "add graph notes system"
+          },
+          "idempotency_key": "save_note:failed-one",
+          "retryable": true,
+          "last_error": "note_capture_parse_failed",
+          "specialist": "save"
+        },
+        {
+          "action_id": "action-failed-project",
+          "action_type": "project_draft_create",
+          "status": "failed",
+          "human_summary": "Retry project draft creation: personal assistant case study launch plan",
+          "normalized_payload": {
+            "project_request": "personal assistant case study launch plan"
+          },
+          "idempotency_key": "project_draft:failed-two",
+          "retryable": true,
+          "last_error": "draft_create_failed",
+          "specialist": "project"
+        }
+      ],
+      "expected_resolution_type": "ambiguous_retry_request",
+      "expected_early_response_contains": [
+        "Which one should I retry"
+      ],
+      "expected_clarification_requested": true
+    },
+    {
+      "id": "retry_completed_returns_receipt",
+      "description": "Retry after a completed action should return the prior receipt instead of duplicating state.",
+      "message_content": "try again",
+      "recent_actions": [
+        {
+          "action_id": "action-completed-save-note",
+          "action_type": "save_note",
+          "status": "succeeded",
+          "human_summary": "Saved note \"NotebookLM podcasts\" in project notes.",
+          "normalized_payload": {
+            "note_payload": "Create all NotebookLM podcast tasks for papers and case studies.",
+            "original_text": "Also add to my nltes i need to creat all the notebook LM podcasts for the papers and casestudies of products"
+          },
+          "idempotency_key": "save_note:completed-one",
+          "retryable": true,
+          "receipt_text": "Saved note \"NotebookLM podcasts\" in project notes. Content: Create all NotebookLM podcast tasks for papers and case studies. Tags: none. Links created: 0.",
+          "specialist": "save"
+        }
+      ],
+      "expected_resolution_type": "already_completed_action",
+      "expected_early_response_contains": [
+        "already completed",
+        "NotebookLM podcasts"
+      ],
+      "expected_clarification_requested": false,
+      "expected_matched_action_type": "save_note"
+    },
+    {
+      "id": "resolved_both_note_reference",
+      "description": "A 'both are now in notes' follow-up should expand to the two most recent successful note saves.",
+      "message_content": "Both are now in notes alongside the formatting flag from earlier - three system fixes captured in total today.",
+      "recent_actions": [
+        {
+          "action_id": "action-note-two",
+          "action_type": "save_note",
+          "status": "succeeded",
+          "human_summary": "Saved note \"NotebookLM podcasts\" in project notes.",
+          "normalized_payload": {
+            "note_payload": "Create all NotebookLM podcast tasks for papers and case studies."
+          },
+          "idempotency_key": "save_note:recent-two",
+          "retryable": true,
+          "receipt_text": "Saved note \"NotebookLM podcasts\" in project notes.",
+          "specialist": "save"
+        },
+        {
+          "action_id": "action-note-one",
+          "action_type": "save_note",
+          "status": "succeeded",
+          "human_summary": "Saved note \"Graph notes\" in project notes.",
+          "normalized_payload": {
+            "note_payload": "Add a graph-based note organisation system like Obsidian."
+          },
+          "idempotency_key": "save_note:recent-one",
+          "retryable": true,
+          "receipt_text": "Saved note \"Graph notes\" in project notes.",
+          "specialist": "save"
+        }
+      ],
+      "expected_resolution_type": "resolved_note_reference",
+      "expected_forced_specialist": "save",
+      "expected_rewritten_content_contains": [
+        "save this to notes:",
+        "Create all NotebookLM podcast tasks for papers and case studies.",
+        "Add a graph-based note organisation system like Obsidian."
+      ],
+      "expected_clarification_requested": false,
+      "expected_matched_action_type": "save_note"
+    },
+    {
+      "id": "ambiguous_both_note_reference",
+      "description": "A 'both' reference without two recent saved notes should ask for clarification.",
+      "message_content": "both are now in notes",
+      "recent_actions": [
+        {
+          "action_id": "action-only-note",
+          "action_type": "save_note",
+          "status": "succeeded",
+          "human_summary": "Saved note \"Graph notes\" in project notes.",
+          "normalized_payload": {
+            "note_payload": "Add a graph-based note organisation system like Obsidian."
+          },
+          "idempotency_key": "save_note:only-one",
+          "retryable": true,
+          "receipt_text": "Saved note \"Graph notes\" in project notes.",
+          "specialist": "save"
+        }
+      ],
+      "expected_resolution_type": "ambiguous_note_reference",
+      "expected_early_response_contains": [
+        "I only have one recent saved note"
+      ],
+      "expected_clarification_requested": true
+    }
+  ]
+}

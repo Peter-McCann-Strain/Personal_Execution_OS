@@ -1,0 +1,99 @@
+{
+  "version": "v1",
+  "_description": "Baseline retrieval-quality metrics per dataset. Regenerate via `uv run python -m scripts.retrieval_report --write-baseline`.",
+  "_generated": "2026-04-18T23:39:26+00:00",
+  "max_regression": 0.03,
+  "datasets": {
+    "assistant_native_continuity.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.21666666666666667,
+      "faithfulness": 0.9871794871794872
+    },
+    "communications.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.8823529411764706
+    },
+    "diary.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.8571428571428571
+    },
+    "memory.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.8571428571428571
+    },
+    "memory_equivalence.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.26666666666666666,
+      "faithfulness": 0.5083333333333333
+    },
+    "notification.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 1.0
+    },
+    "plan_day.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.8571428571428571
+    },
+    "project.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.9230769230769231
+    },
+    "research.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.8571428571428571
+    },
+    "review.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.75
+    },
+    "save.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.75
+    },
+    "socratic.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.8571428571428571
+    },
+    "tools.v1": {
+      "ndcg_at_10": 1.0,
+      "mrr": 1.0,
+      "recall_at_10": 1.0,
+      "context_precision_at_10": 0.3,
+      "faithfulness": 0.9
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "version": "2026-04-18",
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "note": "Per-million-token USD prices. Cache multipliers follow the 2025-2026 Anthropic ephemeral-cache pricing. USD→GBP conversion is approximate; update at the same cadence as the price table. Extend with new models as they ship.",
+  "currency_usd_per_gbp": 0.79,
+  "models": {
+    "claude-sonnet-4-6": {
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00
+    },
+    "claude-sonnet-4-5-20250929": {
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00
+    },
+    "claude-opus-4-7": {
+      "input_per_mtok": 15.00,
+      "output_per_mtok": 75.00
+    },
+    "claude-opus-4-6": {
+      "input_per_mtok": 15.00,
+      "output_per_mtok": 75.00
+    },
+    "claude-haiku-4-5-20251001": {
+      "input_per_mtok": 0.80,
+      "output_per_mtok": 4.00
+    }
+  },
+  "cache_multipliers": {
+    "write_5m": 1.25,
+    "write_1h": 2.00,
+    "read": 0.10
+  }
+}
