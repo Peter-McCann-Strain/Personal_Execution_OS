@@ -212,6 +212,7 @@ function GraphPanel({
                 </p>
               </div>
               <select
+                aria-label="Graph note kind filter"
                 value={kindFilter}
                 onChange={(event) => onKindFilterChange(event.target.value as NoteKind | "all")}
                 className="h-8 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2 text-xs text-[var(--color-fg-primary)]"
@@ -656,6 +657,7 @@ function NotesPage() {
                   />
                 </div>
                 <select
+                  aria-label="Note type filter"
                   value={filterNoteType}
                   onChange={(e) => setFilterNoteType(e.target.value as NoteType | "all")}
                   className={selectClass}
@@ -668,6 +670,7 @@ function NotesPage() {
                   ))}
                 </select>
                 <select
+                  aria-label="PARA category filter"
                   value={filterParaCategory}
                   onChange={(e) => setFilterParaCategory(e.target.value as ParaCategory | "all")}
                   className={selectClass}
@@ -863,6 +866,7 @@ function NotesPage() {
                 </Button>
               </div>
               <textarea
+                aria-label="Canvas JSON to import"
                 value={canvasImportText}
                 onChange={(event) => setCanvasImportText(event.target.value)}
                 rows={14}

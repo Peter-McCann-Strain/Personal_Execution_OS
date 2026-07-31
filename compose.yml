@@ -52,7 +52,8 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres-init.sh:/docker-entrypoint-initdb.d/10-runtime-roles.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U assistant_admin -d personal_execution_os"]
+      test:
+        ["CMD-SHELL", "pg_isready -U assistant_admin -d personal_execution_os"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -222,6 +223,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+      args:
+        VITE_SOURCE_REPOSITORY_URL: ${VITE_SOURCE_REPOSITORY_URL:-}
     environment:
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-}
     ports:

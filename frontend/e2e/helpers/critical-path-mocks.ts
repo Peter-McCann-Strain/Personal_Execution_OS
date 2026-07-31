@@ -870,6 +870,139 @@ export async function installCriticalPathMocks(page: Page) {
       return;
     }
 
+    if (pathname === "/api/scheduled-actions/runs") {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (pathname === "/api/scheduled-actions") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 25,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/entities/relationships") {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (pathname === "/api/entities") {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (pathname === "/api/note-canvases") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 25,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/reviews") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 25,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/decisions/due-review") {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (pathname === "/api/decisions") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 25,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/contacts") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/email/inbox") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/tutorials") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 25,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/content-assets") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
+    if (pathname === "/api/notifications/push/config") {
+      await fulfillJson(route, {
+        enabled: false,
+        public_key: null,
+        active_subscription_count: 0,
+      });
+      return;
+    }
+
+    if (pathname === "/api/notifications/push/subscriptions") {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (pathname === "/api/agent-runs") {
+      await fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 12,
+        offset: 0,
+        has_more: false,
+      });
+      return;
+    }
+
     if (pathname === "/api/notifications/unread-count") {
       await fulfillJson(route, {
         total: 3,

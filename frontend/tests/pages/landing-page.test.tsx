@@ -55,23 +55,21 @@ describe("LandingPage", () => {
 
     expect(screen.getByRole("link", { name: "Execution OS" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Personal Execution OS/ })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /A cognitive extension that captures, organises, and surfaces what matters/i,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/One private workspace to capture what matters/i)).toBeInTheDocument();
 
     expect(
       screen.getByRole("heading", { name: "Three Steps to a Calmer Mind" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "8 Specialists, One Mission" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "8 Focused Workflows, One Workspace" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Architecture That Scales With Your Mind",
+        name: "An Inspectable Local Data Flow",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Production-Grade Technology" }),
+      screen.getByRole("heading", { name: "A Modern, Inspectable Stack" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Ready to extend your mind?")).toBeInTheDocument();
 
@@ -107,7 +105,7 @@ describe("LandingPage", () => {
     renderWithProviders(<LandingPage />);
 
     expect(await screen.findByText("8")).toBeInTheDocument();
-    expect(screen.getByText("40")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
     expect(raf).toHaveBeenCalled();
   });
 });

@@ -100,14 +100,15 @@ function MiniCalendar({
               onClick={() => onSelectDate(day)}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-full text-[10px] transition-colors mx-auto",
-                !inMonth && "opacity-30",
                 today &&
                   !selected &&
                   "bg-[var(--color-info-500)]/20 text-[var(--color-info-500)] font-semibold",
                 selected && "bg-[var(--color-info-500)] text-white font-semibold",
                 !today &&
                   !selected &&
-                  "text-[var(--color-fg-secondary)] hover:bg-[var(--color-bg-overlay)]",
+                  (inMonth
+                    ? "text-[var(--color-fg-secondary)] hover:bg-[var(--color-bg-overlay)]"
+                    : "text-[var(--color-fg-tertiary)] hover:bg-[var(--color-bg-overlay)]"),
               )}
             >
               {format(day, "d")}

@@ -18,17 +18,47 @@ async function seedApiKey(page: import("@playwright/test").Page) {
 }
 
 const MAIN_ROUTES = [
+  "/welcome",
   "/setup",
+  "/login",
   "/dashboard",
+  "/pulse",
   "/chat",
   "/memory",
   "/diary",
+  "/knowledge-graph",
+  "/notes",
   "/workbench",
   "/projects",
   "/goals",
+  "/reviews",
+  "/habits",
+  "/commitments",
+  "/decisions",
+  "/contacts",
+  "/calendar",
+  "/email",
+  "/tutorials",
+  "/notifications",
   "/monitoring",
   "/settings",
 ] as const;
+
+const MOBILE_ROUTES = ["/welcome", "/dashboard", "/workbench", "/settings"] as const;
+
+async function expectNoViolations(page: import("@playwright/test").Page) {
+  let builder = new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]);
+
+  if (GLOBAL_DISABLED_RULES.length > 0) {
+    builder = builder.disableRules(GLOBAL_DISABLED_RULES);
+  }
+  for (const selector of EXCLUDE_SELECTORS) {
+    builder = builder.exclude(selector);
+  }
+
+  const results = await builder.analyze();
+  expect(results.violations).toEqual([]);
+}
 
 test.describe("WCAG 2.1 AA accessibility audit", () => {
   test.beforeEach(async ({ page }) => {
@@ -42,17 +72,16 @@ test.describe("WCAG 2.1 AA accessibility audit", () => {
       // Let lazy routes settle before scanning.
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 
-      let builder = new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]);
+      await expectNoViolations(page);
+    });
+  }
 
-      if (GLOBAL_DISABLED_RULES.length > 0) {
-        builder = builder.disableRules(GLOBAL_DISABLED_RULES);
-      }
-      for (const selector of EXCLUDE_SELECTORS) {
-        builder = builder.exclude(selector);
-      }
-
-      const results = await builder.analyze();
-      expect(results.violations).toEqual([]);
+  for (const route of MOBILE_ROUTES) {
+    test(`has no WCAG 2.1 AA violations on ${route} at a phone viewport`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(route);
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectNoViolations(page);
     });
   }
 });

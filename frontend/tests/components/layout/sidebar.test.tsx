@@ -67,7 +67,7 @@ describe("Sidebar", () => {
 
   it("includes all expected sections", () => {
     const sectionTitles = navSections.map((s: NavSection) => s.title);
-    expect(sectionTitles).toEqual(["Primary", "Workspace", "Admin"]);
+    expect(sectionTitles).toEqual(["Primary", "Workspace", "Operations"]);
   });
 
   it("Primary section has 5 items", () => {

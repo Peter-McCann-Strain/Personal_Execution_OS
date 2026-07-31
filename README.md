@@ -16,6 +16,15 @@ external services off until you configure them.
 
 ![Personal Execution OS desktop dashboard showing a daily plan, read-only schedule, commitments, routines, and activity metrics](docs/assets/product-overview.png)
 
+_Synthetic sample data; no live account or personal records._
+
+### Mobile PWA layout
+
+![Personal Execution OS dashboard at a phone viewport](docs/assets/product-mobile.png)
+
+_Synthetic sample data captured with `cd frontend && npm run capture:showcase`. This is the
+installable web app, not a native iOS or Android app._
+
 ## What it does
 
 - Captures conversations, notes, diary entries, decisions, and commitments
@@ -34,10 +43,19 @@ show a clear unavailable state until a provider is configured.
 This is not a phone operating system, a hosted account service, or a native iOS
 or Android application. The mobile experience is the installable PWA.
 
+See [the capability and maturity matrix](docs/CAPABILITIES.md) for a precise
+split between the working local core, optional local services, external
+providers, disabled-by-default operator systems, and unsupported code.
+
 ## Quick start
 
-You need a running Docker Engine with Docker Compose v2. Docker Desktop and
-Colima are both suitable.
+After cloning or downloading this repository, open a POSIX shell in the
+repository root. The supported Compose install does not require Python or
+Node.js on the host, but the start command is a shell script rather than a
+PowerShell script. Windows users need a POSIX environment such as WSL.
+
+You also need a running Docker Engine with Docker Compose v2. Docker Desktop
+and Colima are both suitable.
 
 ```sh
 ./scripts/start.sh
@@ -50,6 +68,10 @@ and waits for the services to become healthy.
 Open [http://localhost:8080/setup](http://localhost:8080/setup), create the
 local owner password, and sign in. The password is hashed with Argon2id and
 browser sessions use an HTTP-only cookie plus CSRF protection.
+
+Then follow [the first ten minutes walkthrough](docs/FIRST_TEN_MINUTES.md) to
+create a small fictional workspace with every optional provider still
+disabled.
 
 To stop the application without deleting its data:
 
@@ -132,7 +154,11 @@ Before publishing a source snapshot:
 
 ```sh
 python3 scripts/public_release_audit.py --root .
-uv run pip-audit --strict
+uv export --frozen --no-dev --no-emit-project \
+  --format requirements-txt \
+  --output-file /tmp/personal-execution-os-production-requirements.txt
+uv run pip-audit --strict \
+  --requirement /tmp/personal-execution-os-production-requirements.txt
 uv run pre-commit run --all-files
 cd frontend && npm run audit:high
 ```
@@ -143,6 +169,8 @@ changes, secrets, and CodeQL results.
 ## Project documents
 
 - [Setup and operations](docs/SETUP.md)
+- [Capabilities and maturity](docs/CAPABILITIES.md)
+- [First ten minutes](docs/FIRST_TEN_MINUTES.md)
 - [Product scope and non-goals](docs/PRODUCT_SCOPE.md)
 - [Roadmap and known debt](docs/ROADMAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -150,6 +178,8 @@ changes, secrets, and CodeQL results.
 - [Integration data guide](docs/INTEGRATIONS.md)
 - [Security policy and threat model](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
+- [Governance](GOVERNANCE.md)
+- [Changelog](CHANGELOG.md)
 - [Support](SUPPORT.md)
 
 ## License

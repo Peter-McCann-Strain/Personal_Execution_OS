@@ -6,7 +6,7 @@ import { formatShortcut } from "@/lib/platform";
 interface QuickAction {
   label: string;
   icon: React.ReactNode;
-  shortcut: string;
+  shortcut?: string;
   target: string;
 }
 
@@ -20,31 +20,30 @@ const actions: QuickAction[] = [
   {
     label: "Search Memory",
     icon: <Brain className="h-5 w-5" />,
-    shortcut: formatShortcut("Mod+K"),
+    shortcut: formatShortcut("Mod+4"),
     target: "/memory",
   },
   {
     label: "Research",
     icon: <Search className="h-5 w-5" />,
-    shortcut: formatShortcut("Mod+R"),
+    shortcut: formatShortcut("Mod+2"),
     target: "/chat",
   },
   {
     label: "Check Calendar",
     icon: <Calendar className="h-5 w-5" />,
-    shortcut: formatShortcut("Mod+Shift+C"),
+    shortcut: formatShortcut("Mod+6"),
     target: "/calendar",
   },
   {
     label: "Check Email",
     icon: <Mail className="h-5 w-5" />,
-    shortcut: formatShortcut("Mod+E"),
+    shortcut: formatShortcut("Mod+7"),
     target: "/email",
   },
   {
     label: "Weekly Review",
     icon: <BarChart3 className="h-5 w-5" />,
-    shortcut: formatShortcut("Mod+Shift+R"),
     target: "/reviews",
   },
 ];
@@ -71,9 +70,13 @@ function QuickActionButton({ action }: { action: QuickAction }) {
         {action.icon}
       </span>
       <span className="text-xs font-medium text-[var(--color-fg-primary)]">{action.label}</span>
-      <kbd className="text-[10px] font-mono text-[var(--color-fg-tertiary)] rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-overlay)] px-1 py-0.5">
-        {action.shortcut}
-      </kbd>
+      {action.shortcut ? (
+        <kbd className="text-[10px] font-mono text-[var(--color-fg-tertiary)] rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-overlay)] px-1 py-0.5">
+          {action.shortcut}
+        </kbd>
+      ) : (
+        <span className="h-[19px]" aria-hidden="true" />
+      )}
     </button>
   );
 }

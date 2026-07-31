@@ -22,6 +22,7 @@
     "test:e2e:install": "playwright install chromium",
     "test:a11y": "playwright test a11y.spec.ts",
     "test:visual": "playwright test visual.spec.ts",
+    "capture:showcase": "CAPTURE_SHOWCASE=1 playwright test showcase.spec.ts --project=chromium",
     "audit:high": "npm audit --audit-level=high"
   },
   "lint-staged": {

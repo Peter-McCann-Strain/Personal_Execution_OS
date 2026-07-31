@@ -142,7 +142,7 @@ const CommitmentCard = memo(function CommitmentCard({
             <span
               className={cn(
                 "flex items-center gap-1",
-                overdue && "font-semibold text-[var(--color-error-500)]",
+                overdue && "font-semibold text-[var(--color-error-900)]",
               )}
             >
               <Calendar className="h-3 w-3" />

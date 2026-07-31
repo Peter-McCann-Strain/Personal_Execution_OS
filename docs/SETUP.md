@@ -9,8 +9,15 @@ networks they need.
 
 - A current Docker Engine
 - Docker Compose v2
+- macOS or Linux with a POSIX shell; on Windows, use a current WSL 2
+  distribution with Docker integration
 - At least 4 GB of free memory
 - At least 10 GB of free disk space, plus room for your data and backups
+
+The release workflow currently verifies the Compose stack on Ubuntu in CI and
+macOS during release preparation. Other Linux distributions, processor
+architectures, Docker alternatives, and Windows configurations may work but
+are not yet part of the tested host matrix.
 
 Confirm Docker is running:
 
@@ -94,14 +101,20 @@ remain available.
 
 ## Install the PWA
 
-Open the application in a supported browser and use the browser's install
-command. On iOS, use **Share**, then **Add to Home Screen**. On Android and
-desktop Chromium browsers, use **Install app** from the browser menu.
+On the Docker host, open the application in a supported desktop browser and use
+the browser's install command.
+
+A phone cannot reach the default `127.0.0.1` binding through the phone's own
+`localhost`. Complete the [remote-access steps](#remote-access) first and use a
+trusted HTTPS URL before attempting a phone installation. Then, on iOS, use
+**Share**, then **Add to Home Screen**. On Android Chromium browsers, use
+**Install app** from the browser menu.
 
 The PWA is the supported phone experience. There is no native iOS or Android
 binary. The service worker caches application assets only. Personal records,
 API responses, authentication state, and page navigations are not available
-offline.
+offline. Phone installation and behavior still require validation on the
+specific iOS or Android version you intend to use.
 
 ## Enable an integration
 
@@ -236,6 +249,11 @@ For remote use:
 8. Test login, logout, CSRF rejection, WebSocket or streaming behavior, and
    backup restoration before importing real data.
 
+An installable PWA served to another device requires a secure browser context,
+normally HTTPS. A private network alone does not remove that browser
+requirement. This project intentionally does not prescribe one reverse proxy,
+VPN, certificate authority, or DNS provider; the operator owns that boundary.
+
 Do not publish the PostgreSQL, Redis, API, or worker ports. This repository does
 not include a hardened multi-user or public-cloud deployment.
 
@@ -292,7 +310,11 @@ Public-release checks:
 
 ```sh
 python3 scripts/public_release_audit.py --root .
-uv run pip-audit --strict
+uv export --frozen --no-dev --no-emit-project \
+  --format requirements-txt \
+  --output-file /tmp/personal-execution-os-production-requirements.txt
+uv run pip-audit --strict \
+  --requirement /tmp/personal-execution-os-production-requirements.txt
 uv run pre-commit run --all-files
 ```
 

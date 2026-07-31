@@ -1,22 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="disc" x1="10%" y1="10%" x2="90%" y2="90%">
-      <stop offset="0%" stop-color="#1d4ed8" />
-      <stop offset="100%" stop-color="#0f766e" />
+    <linearGradient id="execution-os-disc" x1="8%" y1="8%" x2="92%" y2="92%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#7c3aed" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#0f172a" />
-  <circle cx="256" cy="256" r="188" fill="url(#disc)" />
-  <path
-    d="M172 362V154h91c58 0 94 33 94 84 0 52-36 84-94 84h-35v40h-56Zm56-89h32c28 0 42-13 42-35s-14-35-42-35h-32v70Z"
-    fill="#f8fafc"
-  />
-  <path
-    d="m219 300 37 37 79-91"
+  <rect width="512" height="512" fill="#09090b" />
+  <circle cx="256" cy="256" r="188" fill="url(#execution-os-disc)" />
+  <g
+    transform="translate(100 100) scale(13)"
     fill="none"
-    stroke="#99f6e4"
-    stroke-width="22"
+    stroke="#ffffff"
+    stroke-width="1.8"
     stroke-linecap="round"
     stroke-linejoin="round"
-  />
+  >
+    <path d="M12 18V5" />
+    <path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4" />
+    <path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5" />
+    <path d="M17.997 5.125a4 4 0 0 1 2.526 5.77" />
+    <path d="M18 18a4 4 0 0 0 2-7.464" />
+    <path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517" />
+    <path d="M6 18a4 4 0 0 1-2-7.464" />
+    <path d="M6.003 5.125a4 4 0 0 0-2.526 5.77" />
+  </g>
 </svg>

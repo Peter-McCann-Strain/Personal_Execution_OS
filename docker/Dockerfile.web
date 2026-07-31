@@ -8,6 +8,8 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
+ARG VITE_SOURCE_REPOSITORY_URL=""
+ENV VITE_SOURCE_REPOSITORY_URL=$VITE_SOURCE_REPOSITORY_URL
 RUN npm run build
 
 # ─── Stage 2: Non-root static server + API proxy ──────────────────────────────

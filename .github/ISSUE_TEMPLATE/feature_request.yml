@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a focused improvement that preserves the trust boundaries
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the outcome a self-hosting user cannot achieve today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest complete workflow, not an implementation brand.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: dropdown
+    id: data_flow
+    attributes:
+      label: New external data flow
+      options:
+        - No
+        - Yes, optional and disabled by default
+        - Yes, required
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: trust
+    attributes:
+      label: Privacy, permissions, and irreversible actions
+      description: Explain data sent, retention, operator consent, and recovery boundaries.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I reviewed docs/PRODUCT_SCOPE.md and docs/ROADMAP.md.
+          required: true
+        - label: The proposal does not require real user data in tests or examples.
+          required: true

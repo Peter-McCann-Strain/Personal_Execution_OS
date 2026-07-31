@@ -251,6 +251,8 @@ function Sidebar({ className, mobile = false, onNavigate }: SidebarProps) {
               <Tooltip.Root key={agent}>
                 <Tooltip.Trigger asChild>
                   <span
+                    role="img"
+                    aria-label={`${agent} workflow color`}
                     className="inline-block h-2 w-2 rounded-full opacity-40 transition-all duration-300 hover:opacity-80 hover:scale-150 cursor-default"
                     style={{ backgroundColor: AGENT_COLORS[agent] }}
                   />
@@ -262,7 +264,7 @@ function Sidebar({ className, mobile = false, onNavigate }: SidebarProps) {
                     className="z-50 rounded-[var(--radius-md)] bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] px-2.5 py-1.5 text-xs text-[var(--color-fg-primary)] shadow-lg"
                   >
                     <span className="capitalize font-medium">{agent}</span>
-                    <span className="text-[var(--color-fg-tertiary)]"> — idle</span>
+                    <span className="text-[var(--color-fg-tertiary)]"> workflow</span>
                     <Tooltip.Arrow className="fill-[var(--color-bg-elevated)]" />
                   </Tooltip.Content>
                 </Tooltip.Portal>

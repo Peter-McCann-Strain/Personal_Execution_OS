@@ -265,10 +265,10 @@ const agents = [
     icon: Search,
     color: "var(--color-agent-memory)",
     description:
-      "Semantic search across everything you have ever captured. Extracts entities, builds a knowledge graph, and connects ideas you did not know were related.",
+      "Searches local records and linked knowledge. Optional embeddings and model-backed extraction add semantic retrieval and entity suggestions.",
     capabilities: [
-      "Hybrid BM25 + vector search",
-      "Entity extraction",
+      "Structured local search",
+      "Optional vector retrieval",
       "Knowledge graph",
       "Spaced repetition (SM-2)",
     ],
@@ -279,7 +279,7 @@ const agents = [
     icon: FlaskConical,
     color: "var(--color-agent-research)",
     description:
-      "Multi-step web research with source synthesis and decision frameworks. Goes deep so you do not have to.",
+      "Source-attributed research and decision frameworks when a model and web-search provider are configured.",
     capabilities: [
       "Multi-source web synthesis",
       "Decision frameworks",
@@ -293,7 +293,7 @@ const agents = [
     icon: BarChart3,
     color: "var(--color-agent-review)",
     description:
-      "Weekly and quarterly reviews that detect patterns in your data. Tracks goals, identifies trends, and surfaces what you have been overlooking.",
+      "Weekly and quarterly review workflows for goals, decisions, trends, and follow-through.",
     capabilities: [
       "Weekly/quarterly reviews",
       "Pattern detection",
@@ -307,7 +307,7 @@ const agents = [
     icon: Bell,
     color: "var(--color-agent-notif)",
     description:
-      "Proactive alerts that know when to nudge and when to stay quiet. Tracks commitments, relationships, and manages notification fatigue.",
+      "Optional briefings and alerts for commitments, deadlines, relationships, and notification load.",
     capabilities: [
       "Commitment extraction",
       "Content curation (RSS + AI)",
@@ -325,7 +325,7 @@ const agents = [
     capabilities: [
       "Read-only calendar context",
       "Read-only mail context",
-      "MCP tool bridge",
+      "Provider adapter boundary",
       "Free slot detection",
     ],
     route: "/calendar",
@@ -375,7 +375,7 @@ const steps = [
     number: "02",
     title: "Organise",
     description:
-      "AI agents classify, extract entities, link to existing knowledge, and file into PARA categories. Your knowledge system structures itself while you focus on living.",
+      "Organise records explicitly. When you enable a model, assistants can suggest classifications, entities, links, and PARA categories for you to review.",
     icon: Network,
     gradient: "from-purple-500/20 to-pink-500/20",
   },
@@ -383,7 +383,7 @@ const steps = [
     number: "03",
     title: "Surface",
     description:
-      "Morning briefings, proactive alerts, pattern insights, and semantic search. The right information finds you at the right time -- not the other way around.",
+      "Use local search and reviews by default. Optional briefings, alerts, pattern analysis, and semantic retrieval appear only when configured.",
     icon: Sparkles,
     gradient: "from-pink-500/20 to-amber-500/20",
   },
@@ -546,7 +546,12 @@ function ArchitectureDiagram() {
   ];
 
   return (
-    <div className="relative w-full overflow-x-auto">
+    <div
+      aria-label="Execution OS architecture diagram"
+      className="relative w-full overflow-x-auto"
+      role="region"
+      tabIndex={0}
+    >
       <div className="min-w-[700px] max-w-4xl mx-auto">
         <svg viewBox="0 0 700 300" className="w-full h-auto" style={{ minHeight: 260 }}>
           {/* Connection lines: Inputs -> Router */}
@@ -1101,7 +1106,7 @@ export function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 100]);
 
   const [stat1Count, stat1Ref] = useCountUp(8, 1500);
-  const [stat2Count, stat2Ref] = useCountUp(40, 1800);
+  const [stat2Count, stat2Ref] = useCountUp(0, 900);
 
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)] text-[var(--color-fg-primary)] overflow-x-hidden">
@@ -1194,7 +1199,7 @@ export function LandingPage() {
           >
             <Sparkles className="w-3.5 h-3.5 text-[var(--color-info-500)]" />
             <span className="text-xs text-[var(--color-fg-secondary)]">
-              AI-Powered Cognitive Extension
+              Self-hosted public preview
             </span>
           </motion.div>
 
@@ -1238,8 +1243,18 @@ export function LandingPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.6 }}
           >
-            A cognitive extension that captures, organises, and surfaces what matters — so your
-            brain can focus on having ideas, not storing them.
+            One private workspace to capture what matters, decide what is next, and review what
+            changed.
+          </motion.p>
+          <motion.p
+            className="text-xs sm:text-sm text-[var(--color-fg-tertiary)] max-w-2xl mx-auto leading-relaxed -mt-6 mb-10"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.7 }}
+          >
+            Core records work without an API key. Models, web search, Google data, messaging,
+            telemetry, and automated evaluation are optional, disabled by default, and can send
+            feature-specific data to the provider you choose.
           </motion.p>
 
           {/* CTA */}
@@ -1284,7 +1299,7 @@ export function LandingPage() {
               >
                 {stat1Count}
               </span>
-              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">AI Agents</p>
+              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">Focused Workflows</p>
             </div>
             <div className="w-px h-8 bg-[var(--color-border-subtle)]" />
             <div className="text-center">
@@ -1294,14 +1309,14 @@ export function LandingPage() {
               >
                 {stat2Count}
               </span>
-              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">Features</p>
+              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">Required API Keys</p>
             </div>
             <div className="w-px h-8 bg-[var(--color-border-subtle)]" />
             <div className="text-center">
               <span className="text-3xl sm:text-4xl font-bold text-[var(--color-fg-primary)]">
                 1
               </span>
-              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">Brain</p>
+              <p className="text-xs text-[var(--color-fg-tertiary)] mt-1">Private Owner</p>
             </div>
           </motion.div>
         </motion.div>
@@ -1379,8 +1394,8 @@ export function LandingPage() {
       <Section id="agents" className="overflow-hidden">
         <SectionHeading
           label="Meet Your Agents"
-          title="8 Specialists, One Mission"
-          description="Each agent is focused on a specific domain and uses the model provider you configure. They collaborate through shared context and the knowledge graph."
+          title="8 Focused Workflows, One Workspace"
+          description="Each workflow owns a clear domain. Local records remain useful without a model; model-backed classification, synthesis, and alerts appear only after you configure and enable a provider."
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
@@ -1469,16 +1484,16 @@ export function LandingPage() {
                 <span style={{ color: "var(--color-agent-memory)" }}>Nothing Lost.</span>
               </h2>
               <p className="text-sm md:text-base text-[var(--color-fg-secondary)] leading-relaxed mb-6">
-                Hybrid search combines BM25 keyword matching with vector embeddings for semantic
-                understanding. Every note, diary entry, and piece of research is automatically
-                linked through entity extraction and a growing knowledge graph.
+                Structured search works against local records. Optional vector embeddings add
+                semantic retrieval, while model-backed entity and link suggestions can enrich the
+                knowledge graph when you enable them.
               </p>
               <div className="space-y-3">
                 {[
-                  "Hybrid BM25 + pgvector retrieval with reciprocal rank fusion",
-                  "Automatic entity extraction from every piece of content",
-                  "Knowledge graph that grows organically as you capture more",
-                  "PARA classification: Projects, Areas, Resources, Archive",
+                  "Structured search across locally stored records",
+                  "Optional pgvector retrieval with reciprocal rank fusion",
+                  "Reviewed entity and link suggestions when a model is enabled",
+                  "Explicit PARA classification: Projects, Areas, Resources, Archive",
                 ].map((item, i) => (
                   <motion.div
                     key={i}
@@ -1549,13 +1564,13 @@ export function LandingPage() {
                 <span style={{ color: "var(--color-agent-diary)" }}>Structured & Aware.</span>
               </h2>
               <p className="text-sm md:text-base text-[var(--color-fg-secondary)] leading-relaxed mb-6">
-                Morning briefings give you the lay of the land. Interstitial journaling captures
-                thoughts between tasks. Mood and energy tracking reveals patterns you cannot see in
-                the moment. Your day has a rhythm -- your workspace learns it.
+                Interstitial journaling captures thoughts between tasks, while mood and energy
+                tracking makes changes visible over time. Optional briefings can combine priorities,
+                calendar context, and curated material after you enable the required providers.
               </p>
               <div className="space-y-3">
                 {[
-                  "Morning briefings with calendar, priorities, and curated content",
+                  "Optional briefings with calendar, priorities, and curated content",
                   "Interstitial journaling: capture thoughts between tasks",
                   "Mood and energy tracking with trend analysis",
                   "Progressive summarisation for long-term retrieval",
@@ -1610,8 +1625,8 @@ export function LandingPage() {
               </h2>
               <p className="text-sm md:text-base text-[var(--color-fg-secondary)] leading-relaxed mb-6">
                 Turn vague ambitions into structured, executable plans. Work breakdown structures
-                decompose projects into actionable tasks. WSJF prioritisation ensures you always
-                work on what matters most. Habit tracking builds the consistency that compounds.
+                decompose projects into actionable tasks. WSJF offers an explicit way to compare
+                competing work. Habit tracking makes consistency visible over time.
               </p>
               <div className="space-y-3">
                 {[
@@ -1747,10 +1762,9 @@ export function LandingPage() {
                 <span className="text-[var(--color-info-500)]">Thinking, Not Reading.</span>
               </h2>
               <p className="text-sm md:text-base text-[var(--color-fg-secondary)] leading-relaxed mb-6">
-                Inspired by Oxford's tutorial system, the Socratic agent guides you through your own
-                reasoning with probing questions instead of handing you answers. Five specialist
-                sub-agents -- tutor, clarifier, devil's advocate, connector, and assessor -- work
-                together to deepen your understanding.
+                With a model provider enabled, the Socratic workflow guides your reasoning with
+                probing questions instead of simply handing you answers. Tutor, clarifier, devil's
+                advocate, connector, and assessor roles structure the conversation.
               </p>
               <div className="space-y-3">
                 {[
@@ -1858,12 +1872,12 @@ export function LandingPage() {
           </div>
         </Section>
 
-        {/* 4f. Always-On Intelligence */}
+        {/* 4f. Optional background workflows */}
         <Section>
           <SectionHeading
-            label="Background Intelligence"
-            title="Working While You Sleep"
-            description="20+ background workers run continuously -- detecting patterns, curating content, monitoring relationships, and improving themselves."
+            label="Optional Automation"
+            title="Background Work You Explicitly Enable"
+            description="The worker runs local scheduling and maintenance. Model-backed evaluation, curation, alerts, and provider integrations stay off until you configure them."
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
@@ -1871,37 +1885,37 @@ export function LandingPage() {
               {
                 icon: Sparkles,
                 title: "Pattern Detection",
-                desc: "Analyses diary entries to surface mood trends, energy patterns, stress correlations, and productivity insights you can't see in the moment.",
+                desc: "Review workflows can analyse diary entries for mood, energy, stress, and productivity patterns when model processing is enabled.",
                 color: "var(--color-agent-review)",
               },
               {
                 icon: Globe,
                 title: "Content Curation",
-                desc: "Monitors RSS feeds and trending topics, scores relevance with AI, and delivers personalised reading in your morning briefing.",
+                desc: "An opt-in worker can read configured RSS sources, score relevance with a model, and add selected material to a briefing.",
                 color: "var(--color-agent-research)",
               },
               {
                 icon: Bell,
                 title: "Heartbeat Monitor",
-                desc: "Checks stale goals, upcoming deadlines, overdue commitments, and fading relationships every 30 minutes. Nudges before things slip.",
+                desc: "The scheduled worker can check stale goals, deadlines, commitments, and relationship follow-ups after proactive automation is enabled.",
                 color: "var(--color-agent-notif)",
               },
               {
                 icon: Shield,
-                title: "Auto-Judge Quality",
-                desc: "Scores agent interactions on relevance, actionability, tone, and conciseness, with quality signals available in the monitoring workspace.",
+                title: "Optional Quality Evaluation",
+                desc: "An opt-in evaluator can score model interactions for relevance, actionability, tone, and conciseness in the monitoring workspace.",
                 color: "var(--color-success-500)",
               },
               {
                 icon: Network,
                 title: "Memory Consolidation",
-                desc: "Clusters related episodes, generates summary notes, discovers new entity links, and strengthens your knowledge graph overnight.",
+                desc: "Optional model-backed jobs can propose episode clusters, summary notes, and entity links for the local knowledge workspace.",
                 color: "var(--color-agent-memory)",
               },
               {
                 icon: Zap,
-                title: "Self-Improvement",
-                desc: "Evaluator-optimiser loop checks every response. Prompt versioning, A/B testing, and failure analysis drive continuous improvement.",
+                title: "Evaluation Tooling",
+                desc: "Prompt versions, comparison experiments, and failure analysis are available to operators; they do not run on every response by default.",
                 color: "var(--color-info-500)",
               },
             ].map((worker, i) => (
@@ -2033,15 +2047,15 @@ export function LandingPage() {
                 <span style={{ color: "var(--color-agent-memory)" }}>Decisions.</span>
               </h2>
               <p className="text-sm md:text-base text-[var(--color-fg-secondary)] leading-relaxed mb-6">
-                Zettelkasten atomic notes build compound knowledge over time. Commitments are
-                automatically extracted from conversations and tracked. Decisions are logged with
-                context so you can review outcomes. Spaced repetition ensures important knowledge
-                resurfaces at the right moment.
+                Zettelkasten atomic notes build compound knowledge over time. Commitments are stored
+                explicitly and can also be suggested from conversations when a model is enabled.
+                Decisions retain context for later outcome reviews, and spaced repetition can bring
+                selected knowledge back into view.
               </p>
               <div className="space-y-3">
                 {[
                   "Zettelkasten atomic notes with semantic linking",
-                  "Auto-extracted commitments from conversations",
+                  "Optional commitment suggestions from conversations",
                   "Decision journal with outcome tracking",
                   "SM-2 spaced repetition for long-term retention",
                 ].map((item, i) => (
@@ -2078,8 +2092,8 @@ export function LandingPage() {
       <Section id="architecture">
         <SectionHeading
           label="Under the Hood"
-          title="Architecture That Scales With Your Mind"
-          description="Data flows from input sources through an intelligent router to 8 specialist agents, all backed by PostgreSQL with vector search capabilities."
+          title="An Inspectable Local Data Flow"
+          description="Inputs move through explicit routes and focused workflows into PostgreSQL. Vector search and external providers remain optional."
         />
         <ArchitectureDiagram />
       </Section>
@@ -2095,7 +2109,7 @@ export function LandingPage() {
           >
             <Quote className="w-10 h-10 mx-auto mb-6 text-[var(--color-fg-disabled)]" />
 
-            <blockquote className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mb-6">
+            <blockquote className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mb-12">
               <span
                 style={{
                   background:
@@ -2105,10 +2119,9 @@ export function LandingPage() {
                   backgroundClip: "text",
                 }}
               >
-                "Your brain is for having ideas, not storing them."
+                "Capture what matters. Decide what is next. Review what changed."
               </span>
             </blockquote>
-            <p className="text-sm text-[var(--color-fg-tertiary)] mb-12">-- Tiago Forte</p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
@@ -2160,8 +2173,8 @@ export function LandingPage() {
       <Section>
         <SectionHeading
           label="Built With"
-          title="Production-Grade Technology"
-          description="A carefully chosen stack that prioritises reliability, type safety, and developer experience."
+          title="A Modern, Inspectable Stack"
+          description="Pinned containers, typed application boundaries, automated tests, and documented trust boundaries support a cautious self-hosted preview."
         />
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
@@ -2197,10 +2210,14 @@ export function LandingPage() {
           transition={{ duration: 0.6, delay: 0.3 }}
         >
           {[
-            { icon: Shield, label: "Privacy First", desc: "Self-hosted, your data stays yours" },
+            {
+              icon: Shield,
+              label: "Local by Default",
+              desc: "Enabled providers receive only feature-specific data",
+            },
             { icon: Zap, label: "Fail Fast", desc: "No silent degradation, clear errors" },
-            { icon: GitBranch, label: "Type Safe", desc: "Ruff + ty on every commit" },
-            { icon: Database, label: "Self-Improving", desc: "Eval rubrics, prompt evolution" },
+            { icon: GitBranch, label: "Checked Changes", desc: "Lint, tests, audits, and CI" },
+            { icon: Database, label: "Observable", desc: "Opt-in evaluation and monitoring" },
           ].map((principle) => (
             <div
               key={principle.label}

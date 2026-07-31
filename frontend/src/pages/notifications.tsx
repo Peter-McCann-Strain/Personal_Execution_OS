@@ -163,6 +163,7 @@ function NotificationsPage() {
                 Category
               </span>
               <select
+                aria-label="Notification category filter"
                 value={selectedCategory}
                 onChange={(e) =>
                   setSelectedCategory(e.target.value as NotificationCategory | "all")

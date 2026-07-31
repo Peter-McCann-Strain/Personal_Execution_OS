@@ -93,6 +93,7 @@ _FORBIDDEN_SUFFIXES = frozenset(
 
 _ALLOWED_BINARY_PATHS = frozenset(
     {
+        "docs/assets/product-mobile.png",
         "docs/assets/product-overview.png",
         "frontend/public/icon-192.png",
         "frontend/public/icon-512.png",
@@ -103,6 +104,9 @@ _ALLOWED_BINARY_PATHS = frozenset(
 
 _REVIEWED_BINARY_SHA256 = {
     # Fictional E2E data only; update after visually reviewing any replacement.
+    "docs/assets/product-mobile.png": (
+        "d0ceae82d7cbc4f6234cb3780a1c322a41b9140a6fa17cbce8d1a833cca733b9"
+    ),
     "docs/assets/product-overview.png": (
         "5b2e334b5c24dc56953e0a73e816ebd63be3ebcbe5be86da122b5aaceed70bbe"
     ),

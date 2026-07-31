@@ -85,10 +85,9 @@ export function GraphToolbar({
               className={cn(
                 "inline-flex items-center gap-1 rounded-[var(--radius-full)] border px-2 py-0.5 text-[10px] font-medium transition-all",
                 enabled
-                  ? "border-current opacity-100"
-                  : "border-[var(--color-border-default)] opacity-40 hover:opacity-70",
+                  ? "border-[var(--color-border-strong)] text-[var(--color-fg-primary)]"
+                  : "border-[var(--color-border-default)] text-[var(--color-fg-tertiary)] opacity-70 hover:opacity-100",
               )}
-              style={{ color: enabled ? filter.color : "var(--color-fg-tertiary)" }}
               aria-label={`${enabled ? "Hide" : "Show"} ${filter.label} nodes`}
               aria-pressed={enabled}
             >

@@ -75,7 +75,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
   "/calendar": {
     label: "Calendar",
-    description: "View upcoming events, create changes, and inspect available time windows.",
+    description: "View upcoming events and inspect available time windows without changing them.",
   },
   "/email": {
     label: "Email",

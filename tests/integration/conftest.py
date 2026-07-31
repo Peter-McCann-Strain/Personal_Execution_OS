@@ -30,6 +30,13 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from tests.integration.docker_runtime import configure_testcontainers_runtime
+
+# Docker's CLI can use the active Colima context while docker-py cannot. Resolve
+# that context before any testcontainers import, because Testcontainers caches
+# parts of its environment-backed configuration at module import time.
+configure_testcontainers_runtime()
+
 # Set test environment before importing app
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("LOG_LEVEL", "WARNING")

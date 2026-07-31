@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "motion/react";
 import { Toaster } from "sonner";
 import { setUnauthorizedHandler } from "./api/client";
 import { buildAuthEntryPath } from "./lib/auth-mode";
@@ -87,9 +88,11 @@ if ("serviceWorker" in navigator) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <AppRouter />
-      <ReactiveToaster />
-    </QueryClientProvider>
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <AppRouter />
+        <ReactiveToaster />
+      </QueryClientProvider>
+    </MotionConfig>
   </StrictMode>,
 );

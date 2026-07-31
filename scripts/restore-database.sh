@@ -27,14 +27,60 @@ if [ -e "$checksum_path" ]; then
         echo "Backup checksum must be a regular file, not a link." >&2
         exit 1
     fi
-    backup_dir=$(dirname -- "$backup_path")
-    checksum_name=$(basename -- "$checksum_path")
+
+    if ! checksum_line=$(
+        LC_ALL=C awk '
+            NR == 1 { line = $0 }
+            END {
+                if (NR != 1) {
+                    exit 1
+                }
+                printf "%s", line
+            }
+        ' "$checksum_path"
+    ); then
+        echo "Backup checksum sidecar must contain exactly one record." >&2
+        exit 1
+    fi
+
+    claimed_digest=$(printf '%s\n' "$checksum_line" | LC_ALL=C cut -c 1-64)
+    checksum_separator=$(printf '%s\n' "$checksum_line" | LC_ALL=C cut -c 65-66)
+    claimed_name=$(printf '%s\n' "$checksum_line" | LC_ALL=C cut -c 67-)
+
+    if [ "${#claimed_digest}" -ne 64 ]; then
+        echo "Backup checksum sidecar has an invalid SHA-256 digest." >&2
+        exit 1
+    fi
+    case "$claimed_digest" in
+        *[!0-9A-Fa-f]*)
+            echo "Backup checksum sidecar has an invalid SHA-256 digest." >&2
+            exit 1
+            ;;
+    esac
+    if [ "$checksum_separator" != "  " ]; then
+        echo "Backup checksum sidecar must use two spaces before the backup filename." >&2
+        exit 1
+    fi
+
+    backup_name=$(basename -- "$backup_path")
+    if [ "$claimed_name" != "$backup_name" ]; then
+        echo "Backup checksum sidecar must name the requested archive: $backup_name" >&2
+        exit 1
+    fi
+
     if command -v shasum >/dev/null 2>&1; then
-        (cd "$backup_dir" && shasum -a 256 --check "$checksum_name")
+        actual_digest=$(shasum -a 256 "$backup_path" | LC_ALL=C awk 'NR == 1 { print $1 }')
     elif command -v sha256sum >/dev/null 2>&1; then
-        (cd "$backup_dir" && sha256sum --check "$checksum_name")
+        actual_digest=$(sha256sum "$backup_path" | LC_ALL=C awk 'NR == 1 { print $1 }')
     else
         echo "A SHA-256 utility (shasum or sha256sum) is required." >&2
+        exit 1
+    fi
+
+    claimed_digest=$(printf '%s' "$claimed_digest" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+    actual_digest=$(printf '%s' "$actual_digest" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+    if [ "$actual_digest" != "$claimed_digest" ]; then
+        echo "Backup checksum does not match the requested archive: $backup_path" >&2
         exit 1
     fi
 else

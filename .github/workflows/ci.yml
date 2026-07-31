@@ -78,7 +78,7 @@ jobs:
       - name: Install pinned Chromium runtime
         working-directory: frontend
         run: npx playwright install --with-deps chromium
-      - name: Run full browser suite
+      - name: Run browser acceptance and accessibility suite
         working-directory: frontend
         run: npm run test:e2e -- --project=chromium
 

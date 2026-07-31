@@ -22,11 +22,15 @@ credentials are never enabled in the production app. Server-to-server API keys
 remain a backend/admin concern.
 
 An optional public source link can be added to the landing page with an HTTPS
-URL:
+URL. For local Vite development, set it in the shell:
 
 ```bash
 VITE_SOURCE_REPOSITORY_URL=https://github.com/your-org/your-repository
 ```
+
+For the supported Compose build, set the same value in the root `.env` and
+rebuild the `web` image. Compose forwards it only as a public build argument;
+the web container never receives the backend `.env` file.
 
 The service worker caches only versioned static assets and icons. It never
 caches navigation responses, API calls, authentication routes, setup routes, or
@@ -42,6 +46,12 @@ npm run dev
 npm run test
 npm run lint
 npm run build
+npm run test:e2e
 ```
+
+`test:e2e` is the CI-gated browser acceptance, PWA, responsive interaction,
+and accessibility suite. `test:visual` is a separate snapshot-development
+command and is not currently a release gate. `capture:showcase` regenerates the
+reviewed, fixture-only mobile image used in the root README.
 
 The frontend expects the API under `/api`. Vite proxies `/api` and `/ws` to the local backend during development.

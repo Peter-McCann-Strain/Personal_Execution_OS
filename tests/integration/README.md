@@ -41,8 +41,7 @@ uv run pytest tests/integration/ -k "not real_db" -x
 
 ## Requirements for the real-DB fixtures
 
-* **Docker / OrbStack / colima** with a daemon reachable on the default
-  Unix socket (`/var/run/docker.sock`) or via `DOCKER_HOST`.
+* **Docker, OrbStack, or Colima** with a reachable daemon.
 * First run pulls `pgvector/pgvector:pg16` (~400 MB) — subsequent runs are
   fast (~3 s container boot + migrations).
 * Python deps: `testcontainers[postgres]` and `psycopg[binary]` are pinned
@@ -50,6 +49,41 @@ uv run pytest tests/integration/ -k "not real_db" -x
 
 If Docker is not available, the session-scoped `postgres_container`
 fixture calls `pytest.skip`, so the rest of the suite still runs.
+
+### Colima
+
+The integration fixture inspects the active Docker CLI context before
+Testcontainers is imported. When that context points to a live Colima Unix
+socket, it configures:
+
+```text
+DOCKER_HOST=unix://${HOME}/.colima/default/docker.sock
+TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+```
+
+The first path is the socket visible to Python on the macOS host. The second
+is the socket path Ryuk must mount inside the Colima VM. Any values you export
+yourself take precedence over automatic detection.
+
+For a custom Colima profile or a Docker context that cannot be inspected,
+provide both values before running pytest:
+
+```bash
+export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
+uv run pytest tests/integration/test_episodes_real_db.py -x -v
+```
+
+Useful diagnostics:
+
+```bash
+docker context show
+docker context inspect
+docker info
+```
+
+Do not disable Ryuk as a workaround. It is responsible for cleaning up
+containers when a test process exits unexpectedly.
 
 ## Fixture pattern
 

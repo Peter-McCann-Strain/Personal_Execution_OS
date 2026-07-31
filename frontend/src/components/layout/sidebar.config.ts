@@ -41,7 +41,7 @@ const navSections: NavSection[] = [
   {
     title: "Primary",
     items: [
-      { label: "Today", icon: LayoutDashboard, path: "/dashboard" },
+      { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
       { label: "Chat", icon: MessageSquare, path: "/chat", agentColor: "communications" },
       { label: "Capture", icon: BookOpen, path: "/diary", agentColor: "diary" },
       { label: "Workbench", icon: PanelTop, path: "/workbench", agentColor: "project" },
@@ -66,7 +66,7 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    title: "Admin",
+    title: "Operations",
     items: [
       { label: "Pulse", icon: Waves, path: "/pulse", agentColor: "notification" },
       { label: "Notifications", icon: Bell, path: "/notifications", agentColor: "notification" },

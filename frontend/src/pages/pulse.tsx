@@ -243,6 +243,7 @@ function PulsePage() {
                   Title
                 </label>
                 <Input
+                  aria-label="Scheduled action title"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="Morning research scan"
@@ -253,6 +254,7 @@ function PulsePage() {
                   Prompt
                 </label>
                 <textarea
+                  aria-label="Scheduled action prompt"
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
                   rows={4}
@@ -265,6 +267,7 @@ function PulsePage() {
                   Schedule
                 </label>
                 <select
+                  aria-label="Scheduled action frequency"
                   value={scheduleType}
                   onChange={(event) => setScheduleType(event.target.value as ScheduleType)}
                   className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-fg-primary)]"
@@ -280,6 +283,7 @@ function PulsePage() {
                   Delivery
                 </label>
                 <select
+                  aria-label="Scheduled action delivery channel"
                   value={deliveryChannel}
                   onChange={(event) =>
                     setDeliveryChannel(event.target.value as ScheduledAction["delivery_channel"])
@@ -297,6 +301,7 @@ function PulsePage() {
                     Run at
                   </label>
                   <Input
+                    aria-label="Scheduled action run time"
                     type="datetime-local"
                     value={runAt}
                     onChange={(event) => setRunAt(event.target.value)}
@@ -308,13 +313,21 @@ function PulsePage() {
                     <label className="mb-1 block text-xs font-medium text-[var(--color-fg-secondary)]">
                       Hour
                     </label>
-                    <Input value={hour} onChange={(event) => setHour(event.target.value)} />
+                    <Input
+                      aria-label="Scheduled action hour"
+                      value={hour}
+                      onChange={(event) => setHour(event.target.value)}
+                    />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium text-[var(--color-fg-secondary)]">
                       Minute
                     </label>
-                    <Input value={minute} onChange={(event) => setMinute(event.target.value)} />
+                    <Input
+                      aria-label="Scheduled action minute"
+                      value={minute}
+                      onChange={(event) => setMinute(event.target.value)}
+                    />
                   </div>
                 </>
               )}
@@ -324,6 +337,7 @@ function PulsePage() {
                     Weekday
                   </label>
                   <select
+                    aria-label="Scheduled action weekday"
                     value={weekday}
                     onChange={(event) => setWeekday(event.target.value)}
                     className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-fg-primary)]"
@@ -343,7 +357,11 @@ function PulsePage() {
                   <label className="mb-1 block text-xs font-medium text-[var(--color-fg-secondary)]">
                     Day of month
                   </label>
-                  <Input value={monthDay} onChange={(event) => setMonthDay(event.target.value)} />
+                  <Input
+                    aria-label="Scheduled action day of month"
+                    value={monthDay}
+                    onChange={(event) => setMonthDay(event.target.value)}
+                  />
                 </div>
               ) : null}
             </div>
