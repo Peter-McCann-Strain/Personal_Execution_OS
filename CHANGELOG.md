@@ -59,6 +59,8 @@ releases.
 - Kept Docker stdin attached while restoring local-state archives so the
   application-data payload reaches the verification and replacement
   containers.
+- Added a web-edge health check so Compose startup waits for NGINX to serve a
+  loopback request before reporting the installation ready.
 
 ## 0.1.0 - 2026-07-31
 

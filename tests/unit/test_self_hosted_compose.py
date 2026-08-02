@@ -112,6 +112,13 @@ def test_compose_orders_migrations_before_runtime() -> None:
     )[0]
     assert "healthcheck:" in worker_block
     assert "--check" in worker_block
+    web_block = content.split("  web:", maxsplit=1)[1].split(
+        "\nvolumes:",
+        maxsplit=1,
+    )[0]
+    assert "healthcheck:" in web_block
+    assert "http://127.0.0.1:8080/" in web_block
+    assert "--spider" in web_block
 
 
 def test_redis_queue_data_cannot_be_evicted() -> None:
