@@ -87,9 +87,10 @@ to due work, today's schedule, and active routines. With providers still
 disabled, external calendar and mail context should remain unavailable rather
 than showing invented data.
 
-Open **Today** from the primary navigation as well. A new workspace will still
-look sparse. Its summaries become more useful after you add deadlines,
-commitments, routine completions, and diary records over time.
+Open **Dashboard** from the primary navigation as well. Its **Today** panel
+summarises due work, the current schedule, commitments, and routines. A new
+workspace will still look sparse; the summaries become more useful after you
+add deadlines, commitments, routine completions, and diary records over time.
 
 ## 6. Confirm the safety boundary
 

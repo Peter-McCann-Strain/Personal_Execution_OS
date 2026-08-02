@@ -23,8 +23,8 @@ They do not decide whether the named public repository is the right one.
 
 ## Verify the source tree
 
-Start from the proposed commit in a fresh clone or a `git archive` extraction.
-The source tree must have no uncommitted files:
+Start from the proposed commit in a fresh clone. The source tree must have no
+uncommitted files:
 
 ```sh
 git status --short
@@ -33,6 +33,11 @@ python3 scripts/public_release_audit.py --root . --git-metadata
 gitleaks git --redact --no-banner .
 uv run pre-commit run --all-files
 ```
+
+If you are separately reviewing a `git archive` extraction, it has no `.git`
+directory. Run the tree audit without `--git-metadata`; run the history,
+identity, status, and pre-commit checks in the clean clone that produced the
+archive.
 
 The full privacy audit intentionally inspects ignored files. If it reports a
 generated coverage file or browser report, remove that generated output from

@@ -743,19 +743,24 @@ See [ADR-0004](decisions/ADR-0004-progressive-web-app.md).
   `create_app()` and `lifespan()`.
 - `src/app/config.py`: typed settings and gates; start at `Settings`.
 - `src/app/api/`: HTTP dependencies, middleware, schemas, routes, idempotency,
-  and limits; start at `deps.py`, then the feature route.
+  and limits; start at `deps.py`, then the feature route. Monitoring keeps its
+  public facade in `routes/monitoring.py` and groups implementations in the
+  adjacent `monitoring_*` modules.
 - `src/app/domain/models.py`: transport-independent contracts; start at
   `MessageInput`, `ChatResponse`, and `Specialist`.
 - `src/app/domain/services/`: application use cases; use the feature service or
-  `chat.py` for model orchestration.
+  `chat.py` for model orchestration. Chat phases are separated into the
+  adjacent `_chat_context`, `_chat_execution`, `_chat_persistence`, and
+  `_chat_quality` modules.
 - `src/app/domain/services/handlers/`: chat specialist adapters; read
   `_common.py`, then one handler.
 - `src/app/agents/`: prompts, model calls, graphs, and dormant compatibility;
   start at the relevant prompt/specialist, not the legacy graph.
 - `src/app/core/`: security, context, evaluation, telemetry, and adapters;
   follow imports from the use case.
-- `src/app/persistence/models.py`: current ORM view; read scope mixins before a
-  feature model.
+- `src/app/persistence/models.py`: stable ORM import facade; declarations are
+  grouped by feature under `model_defs/`. Read `model_defs/base.py` before a
+  feature declaration.
 - `src/app/persistence/repositories/`: reusable durable queries; choose the
   repository matching the route.
 - `src/app/persistence/migrations/`: schema and policy history;
@@ -769,6 +774,8 @@ See [ADR-0004](decisions/ADR-0004-progressive-web-app.md).
 - `frontend/src/main.tsx` and `router.tsx`: browser bootstrap and route tree.
 - `frontend/src/api/`: HTTP boundary; read `client.ts`, then a resource module.
 - `frontend/src/pages/` and `components/`: route experiences and reusable UI.
+  The public landing page is split into content, sections, visuals, and
+  primitives under `frontend/src/components/landing/`.
 - `tests/unit/`: isolated behavior; match the implementation module.
 - `tests/integration/`: cross-layer API and real-PostgreSQL evidence.
 - `tests/contract/`: generated and behavioral OpenAPI checks.

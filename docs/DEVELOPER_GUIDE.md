@@ -162,14 +162,18 @@ Use these as entry points rather than reading directories front to back.
 - **API contracts/transactions:** `src/app/api/routes/`, `schemas.py`, and
   `transactions.py`; route, OpenAPI, contract, and repository tests.
 - **Domain/chat:** `src/app/domain/models.py` and
-  `services/chat.py:process_message`; service/handler/integration tests.
+  `services/chat.py:process_message`; follow the imports into
+  `_chat_context.py`, `_chat_execution.py`, `_chat_persistence.py`, and
+  `_chat_quality.py` for the individual phases.
 - **Intent/specialists:** `services/orchestrator.py` and `handlers/`; routing
   and handler tests.
 - **Model-backed code:** `src/app/agents/`; agent, prompt, graph, and evaluation
   tests.
 - **Shared policy:** `src/app/core/`; matching focused unit tests.
-- **Persistence:** `models.py`, `repositories/`, `database.py`, and migration
-  versions; repository, real-database, RLS, and migration evidence.
+- **Persistence:** `models.py` is the stable import facade; declarations live
+  under `model_defs/`. Read `model_defs/base.py` before the feature declaration,
+  then `repositories/`, `database.py`, and the relevant migration versions.
+  Repository, real-database, RLS, and migration tests provide the evidence.
 - **Workers:** `src/app/workers/main.py`; worker lifecycle/schedule tests.
 - **Knowledge algorithms:** `src/app/second_brain/`; matching algorithm tests.
 
@@ -179,8 +183,9 @@ Use these as entry points rather than reading directories front to back.
   browser tests.
 - **HTTP/resources:** `api/client.ts` and `api/*.ts`; API-client, resource, and
   page tests.
-- **Pages/components:** `pages/` and `components/`; tests under corresponding
-  `frontend/tests/` folders.
+- **Pages/components:** `pages/` and `components/`; the public landing page is
+  split under `components/landing/` into content, sections, visuals, and
+  primitives. Tests live under the corresponding `frontend/tests/` folders.
 - **Device preferences:** `stores/app.ts`; store tests.
 - **Browser acceptance:** `frontend/e2e/`; the Playwright CI job.
 

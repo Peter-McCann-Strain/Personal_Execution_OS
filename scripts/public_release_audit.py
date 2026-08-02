@@ -105,10 +105,10 @@ _ALLOWED_BINARY_PATHS = frozenset(
 _REVIEWED_BINARY_SHA256 = {
     # Fictional E2E data only; update after visually reviewing any replacement.
     "docs/assets/product-mobile.png": (
-        "d0ceae82d7cbc4f6234cb3780a1c322a41b9140a6fa17cbce8d1a833cca733b9"
+        "31bfc0827c400c0e1c1ba1d4a2b2203e4ae39649e198cfa56790172779a6adb5"
     ),
     "docs/assets/product-overview.png": (
-        "5b2e334b5c24dc56953e0a73e816ebd63be3ebcbe5be86da122b5aaceed70bbe"
+        "8970ea96ddab41061cc6599701a674351d9acf3948c800a1207f9dd3413190c4"
     ),
 }
 
