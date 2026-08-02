@@ -116,7 +116,7 @@ def _make_mock_tool(name: str, description: str, schema: dict | None = None) -> 
     tool = MagicMock()
     tool.name = name
     tool.description = description
-    tool.inputSchema = schema or {"type": "object", "properties": {}}
+    tool.input_schema = schema or {"type": "object", "properties": {}}
     return tool
 
 
@@ -188,6 +188,33 @@ class TestGetToolsForClaude:
                 "name": "tavily-search__search",
                 "description": "Web search",
                 "input_schema": {"type": "object", "properties": {}},
+            }
+        ]
+
+    def test_uses_current_mcp_tool_model_fields(self):
+        """Real MCP v2 Tool models expose input_schema, not the v1 alias name."""
+        from mcp import Tool
+
+        manager = MCPClientManager()
+        conn = MagicMock()
+        conn.available = True
+        conn.tools = [
+            Tool(
+                name="search",
+                description="Search the web",
+                inputSchema={"type": "object", "properties": {"query": {"type": "string"}}},
+            )
+        ]
+        manager._servers["current-sdk"] = conn
+
+        assert manager.get_tools_for_claude() == [
+            {
+                "name": "current-sdk__search",
+                "description": "Search the web",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
             }
         ]
 
@@ -284,7 +311,8 @@ class TestCallTool:
 
         mock_result = MagicMock()
         mock_result.content = [mock_text_block]
-        mock_result.isError = False
+        mock_result.is_error = False
+        mock_result.structured_content = None
 
         mock_session = AsyncMock()
         mock_session.call_tool.return_value = mock_result
@@ -310,8 +338,8 @@ class TestCallTool:
 
         mock_result = MagicMock()
         mock_result.content = []
-        mock_result.structuredContent = {"events": []}
-        mock_result.isError = False
+        mock_result.structured_content = {"events": []}
+        mock_result.is_error = False
 
         mock_session = AsyncMock()
         mock_session.call_tool.return_value = mock_result
@@ -327,6 +355,32 @@ class TestCallTool:
         assert result["is_error"] is False
         assert result["content"] == [{"type": "text", "text": '{"events": []}'}]
         assert result["structured_content"] == {"events": []}
+
+    @pytest.mark.asyncio
+    async def test_tool_call_uses_current_mcp_result_model_fields(self):
+        """Real MCP v2 results should serialize through snake-case Python fields."""
+        import asyncio
+
+        from mcp.types import CallToolResult, TextContent
+
+        manager = MCPClientManager()
+        session = AsyncMock()
+        session.call_tool.return_value = CallToolResult(
+            content=[TextContent(type="text", text="current result")],
+            structuredContent={"version": 2},
+            isError=False,
+        )
+        conn = MagicMock(available=True, session=session, error=None)
+        manager._servers["current-sdk"] = conn
+        manager._locks["current-sdk"] = asyncio.Lock()
+
+        result = await manager.call_tool("current-sdk", "search", {})
+
+        assert result == {
+            "content": [{"type": "text", "text": "current result"}],
+            "is_error": False,
+            "structured_content": {"version": 2},
+        }
 
     @pytest.mark.asyncio
     async def test_tool_call_error_wraps_in_mcp_error(self):
@@ -361,7 +415,8 @@ class TestCallTool:
         mock_text_block.model_dump.return_value = {"type": "text", "text": "recovered"}
         retry_result = MagicMock()
         retry_result.content = [mock_text_block]
-        retry_result.isError = False
+        retry_result.is_error = False
+        retry_result.structured_content = None
         new_session.call_tool.return_value = retry_result
 
         conn = MagicMock()
@@ -400,7 +455,8 @@ class TestCallTool:
         mock_text_block.model_dump.return_value = {"type": "text", "text": "fresh"}
         retry_result = MagicMock()
         retry_result.content = [mock_text_block]
-        retry_result.isError = False
+        retry_result.is_error = False
+        retry_result.structured_content = None
         new_session.call_tool.return_value = retry_result
 
         conn = MagicMock()
@@ -730,7 +786,7 @@ class TestConnectServer:
         mock_tool = MagicMock()
         mock_tool.name = "search"
         mock_tool.description = "Search"
-        mock_tool.inputSchema = {"type": "object"}
+        mock_tool.input_schema = {"type": "object"}
 
         mock_tools_result = MagicMock()
         mock_tools_result.tools = [mock_tool]
@@ -768,6 +824,65 @@ class TestConnectServer:
 
         # Clean up
         await manager._server_stacks["test-server"].aclose()
+
+    @pytest.mark.asyncio
+    async def test_streamable_http_uses_v2_transport_and_authenticated_client(self):
+        """Remote MCP connections must use the v2 transport name and HTTP client API."""
+        oauth_client = AsyncMock()
+        oauth_client.acquire_token.return_value = "access-token"
+        manager = MCPClientManager(oauth_client=oauth_client)
+
+        tools_result = MagicMock(tools=[])
+        session = AsyncMock()
+        session.list_tools.return_value = tools_result
+        http_client = MagicMock()
+
+        http_client_context = AsyncMock()
+        http_client_context.__aenter__.return_value = http_client
+        transport_context = AsyncMock()
+        transport_context.__aenter__.return_value = (MagicMock(), MagicMock())
+        session_context = AsyncMock()
+        session_context.__aenter__.return_value = session
+
+        with (
+            patch(
+                "src.app.core.mcp_client.create_mcp_http_client",
+                return_value=http_client_context,
+            ) as create_http_client,
+            patch(
+                "src.app.core.mcp_client.streamable_http_client",
+                return_value=transport_context,
+            ) as create_transport,
+            patch(
+                "src.app.core.mcp_client._session_context",
+                return_value=session_context,
+            ),
+        ):
+            await manager._connect_server(
+                "remote",
+                {
+                    "transport": "streamable-http",
+                    "url": "https://mcp.example.test/mcp",
+                },
+            )
+
+        assert manager._servers["remote"].available is True
+        oauth_client.acquire_token.assert_awaited_once_with(
+            "remote",
+            "https://mcp.example.test/mcp",
+        )
+        create_http_client.assert_called_once_with(
+            headers={
+                "Authorization": "Bearer access-token",
+                "MCP-Protocol-Version": "2025-11-25",
+            }
+        )
+        create_transport.assert_called_once_with(
+            url="https://mcp.example.test/mcp",
+            http_client=http_client,
+        )
+        session.initialize.assert_awaited_once()
+        await manager._server_stacks["remote"].aclose()
 
     @pytest.mark.asyncio
     async def test_connect_server_failure_marks_unavailable(self):
@@ -916,7 +1031,8 @@ class TestCallToolEdgeCases:
 
         mock_result = MagicMock()
         mock_result.content = [mock_text_block]
-        mock_result.isError = False
+        mock_result.is_error = False
+        mock_result.structured_content = None
 
         mock_session = AsyncMock()
         mock_session.call_tool.return_value = mock_result

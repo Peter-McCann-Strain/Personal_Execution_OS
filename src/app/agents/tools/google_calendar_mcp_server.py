@@ -1,11 +1,13 @@
 """Native Google Calendar MCP server backed by the in-repo calendar client."""
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server import MCPServer
+from mcp.server.mcpserver import Context
 
 from src.app.agents.tools.calendar import CalendarService
 from src.app.agents.tools.google_mcp_env import load_google_mcp_env
@@ -36,7 +38,9 @@ class CalendarContext:
 
 
 @asynccontextmanager
-async def calendar_lifespan(_server: FastMCP) -> Any:
+async def calendar_lifespan(
+    _server: MCPServer[CalendarContext],
+) -> AsyncIterator[CalendarContext]:
     service = _service_from_env()
     try:
         yield CalendarContext(service=service)
@@ -44,16 +48,19 @@ async def calendar_lifespan(_server: FastMCP) -> Any:
         await service.close()
 
 
-mcp = FastMCP("Google Calendar", lifespan=calendar_lifespan)
+mcp: MCPServer[CalendarContext] = MCPServer(
+    "Google Calendar",
+    lifespan=calendar_lifespan,
+)
 
 
-def _get_service(ctx: Context) -> CalendarService:
+def _get_service(ctx: Context[CalendarContext]) -> CalendarService:
     return ctx.request_context.lifespan_context.service
 
 
 @mcp.tool()
 async def list_events(
-    ctx: Context,
+    ctx: Context[CalendarContext],
     start_time: str | None = None,
     end_time: str | None = None,
     days: int = 7,
@@ -77,7 +84,7 @@ async def list_events(
 
 
 async def create_event(
-    ctx: Context,
+    ctx: Context[CalendarContext],
     title: str,
     start_time: str,
     end_time: str,
@@ -98,7 +105,7 @@ async def create_event(
 
 
 async def update_event(
-    ctx: Context,
+    ctx: Context[CalendarContext],
     event_id: str,
     title: str | None = None,
     start_time: str | None = None,
@@ -118,7 +125,7 @@ async def update_event(
     return event.model_dump(mode="json")
 
 
-async def delete_event(ctx: Context, event_id: str) -> dict[str, bool]:
+async def delete_event(ctx: Context[CalendarContext], event_id: str) -> dict[str, bool]:
     """Delete a calendar event by ID."""
     await _get_service(ctx).delete_event(event_id)
     return {"success": True}
@@ -126,7 +133,7 @@ async def delete_event(ctx: Context, event_id: str) -> dict[str, bool]:
 
 @mcp.tool()
 async def find_free_slots(
-    ctx: Context,
+    ctx: Context[CalendarContext],
     duration_minutes: int = 60,
     days_ahead: int = 7,
     workday_start_hour: int = 9,

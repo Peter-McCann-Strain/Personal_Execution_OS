@@ -23,6 +23,17 @@ COPY data/ data/
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM python:3.12.13-alpine3.23@sha256:601d3d3797e90e2534782e69c85fafb7971b43f24c7b1b079b7e48dd435e458d
 
+ARG APP_VERSION=0.1.1
+ARG SOURCE_REPOSITORY_URL=https://github.com/Peter-McCann-Strain/Personal_Execution_OS
+ARG SOURCE_REVISION=local
+
+LABEL org.opencontainers.image.title="Personal Execution OS backend" \
+      org.opencontainers.image.description="API and worker runtime for Personal Execution OS" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.source="${SOURCE_REPOSITORY_URL}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 # The core image contains only the Python application. Optional browser/MCP
 # runtimes belong in separately versioned sidecars rather than the trusted API
 # process.

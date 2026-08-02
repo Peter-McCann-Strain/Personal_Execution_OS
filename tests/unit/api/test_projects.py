@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +14,30 @@ from src.app.api.deps import get_db
 from src.app.api.routes.projects import router
 from src.app.core.exceptions import EXCEPTION_STATUS_MAP, AppError, ErrorResponse
 from tests.unit.api.auth_helpers import override_current_principal
+
+
+def test_project_datetime_normalizer_rejects_non_callable_serializer() -> None:
+    from src.app.api.routes.projects import _iso_datetime_value
+
+    assert _iso_datetime_value(MagicMock(isoformat="not-callable")) is None
+
+
+async def test_load_dependency_map_uses_sqlalchemy_sync_scalar_result() -> None:
+    from src.app.api.routes.projects import _load_dependency_map
+
+    task_id = uuid.uuid4()
+    dependency_id = uuid.uuid4()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [
+        SimpleNamespace(task_id=task_id, depends_on_task_id=dependency_id)
+    ]
+    session = AsyncMock()
+    session.execute.return_value = result
+
+    dependency_map = await _load_dependency_map(session, [task_id])
+
+    assert dependency_map == {task_id: [dependency_id]}
+
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -87,6 +112,12 @@ def _make_mock_task(
     m.created_at = now
     m.updated_at = now
     return m
+
+
+def _make_task_update_result(task: MagicMock) -> MagicMock:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = task
+    return result
 
 
 def _make_mock_epic(
@@ -517,7 +548,7 @@ async def test_update_task_success():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -545,7 +576,7 @@ async def test_update_task_with_all_fields_and_in_progress():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -581,7 +612,7 @@ async def test_update_task_done_sets_completed_at():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -608,7 +639,7 @@ async def test_update_task_no_fields_still_returns_current_task():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 

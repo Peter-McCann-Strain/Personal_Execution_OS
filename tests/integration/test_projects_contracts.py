@@ -269,7 +269,10 @@ class TestProjectsContracts:
 
         async def _apply_update(_stmt):
             mock_task.status = "in_progress"
-            return MagicMock()
+            mock_task.estimate_hours = 8.0
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = mock_task
+            return result
 
         mock_session.get = AsyncMock(return_value=mock_task)
         mock_session.execute = AsyncMock(side_effect=_apply_update)
@@ -283,6 +286,7 @@ class TestProjectsContracts:
         data = response.json()
         assert data["id"] == str(task_id)
         assert data["status"] == "in_progress"
+        assert data["estimate_hours"] == 8.0
 
     async def test_get_project_not_found_contract(self, integration_client):
         client, mock_session, _mock_anthropic = integration_client

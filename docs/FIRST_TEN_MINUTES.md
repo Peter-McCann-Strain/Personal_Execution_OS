@@ -95,7 +95,7 @@ commitments, routine completions, and diary records over time.
 
 Open **Settings**, then **Integrations**. Confirm that Anthropic, Google
 Workspace, Tavily, Sentry, and PostHog do not report a configured or connected
-provider unless you deliberately changed the example configuration.
+provider unless you changed the example configuration.
 
 The local records above do not need a model API key. Chat, model classification,
 web research, external sync, and other provider-backed behavior remain
@@ -104,17 +104,24 @@ unavailable until their required service is configured. The
 
 ## 7. Make a test backup
 
-From the repository root, run:
+From the repository root, stop application writers, create the verified
+database dump, stop the remaining services without deleting volumes, and
+create the complementary local-state archive:
 
 ```sh
+docker compose stop web api worker
 ./scripts/backup-database.sh
+docker compose down
+./scripts/backup-local-state.sh
+docker compose up --detach --wait
 ```
 
-The script writes a PostgreSQL dump and matching SHA-256 file under `backups/`
-unless you supply another path. Treat both files as sensitive. This database
-archive does not include `.env`, `config/IDENTITY.local.md`, Redis, or the
-`app-data` volume; [SETUP.md](SETUP.md) describes complete backup coverage and
-the destructive restore command.
+The scripts write a PostgreSQL dump and a versioned local-state archive under
+`backups/`, each with a matching SHA-256 sidecar. The second archive covers
+`.env`, `config/IDENTITY.local.md`, and `app-data`; Redis remains deliberately
+excluded. Treat all four files as sensitive. [Backup and
+recovery](BACKUP_AND_RECOVERY.md) defines the exact scope, format, restore
+sequence, and recovery drill.
 
 You now have a small local execution loop: an outcome, a project, a supporting
 note, a repeatable check, and a verified database archive. Delete the fictional

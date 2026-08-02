@@ -207,6 +207,34 @@ class TestRunEvalExport:
         assert "not scored" in content
 
     @pytest.mark.asyncio
+    async def test_partially_scored_record_is_exported_as_unscored(self, tmp_path: Path):
+        """A partial judge write must not break score averaging or record formatting."""
+        record = _make_record(
+            score_relevance=0.85,
+            score_actionability=None,
+            score_tone=0.9,
+            score_conciseness=0.8,
+        )
+        session = AsyncMock()
+        ctx = {
+            "settings": _make_settings(tmp_path),
+            "session_factory": _make_session_factory(session),
+        }
+
+        with patch(
+            "src.app.workers.eval_export.get_interactions_for_export",
+            new_callable=AsyncMock,
+            return_value=[record],
+        ):
+            from src.app.workers.eval_export import run_eval_export
+
+            await run_eval_export(ctx)
+
+        content = next((tmp_path / "exports").glob("interactions_*.md")).read_text()
+        assert "Summary Scores" not in content
+        assert '"scores": "not scored"' in content
+
+    @pytest.mark.asyncio
     async def test_exports_optimizer_triggered(self, tmp_path: Path):
         """Export records show optimizer trigger status."""
         record = _make_record(

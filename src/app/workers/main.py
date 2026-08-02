@@ -184,8 +184,8 @@ def _build_cron_schedule() -> list:
             hour={utc_quality_alerts_hour},
             minute={utc_quality_alerts_minute},
         ),
-        # SLO burn-rate alerts — daily at user-local 9:15 (before quality alerts
-        # so the first ops signal is objective breaches, not derivatives).
+        # SLO burn-rate alerts — daily at user-local 9:15, after the 9:00
+        # quality-degradation check.
         cron(
             run_slo_alerts,
             hour={utc_slo_alerts_hour},

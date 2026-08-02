@@ -9,10 +9,9 @@ timeline.
 
 ### Reliability and operations
 
-- Add a supported backup path for the application-data volume and private local
-  configuration.
-- Add a failure-injection recovery drill covering a broken post-restore
-  migration and a complete machine-backup format for Redis and `app-data`.
+- Test explicit Redis recovery choices and stale queue handling. Automated
+  fault injection now covers failed database migrations, database rollback,
+  local-state replacement, and local-state rollback.
 - Publish versioned upgrade notes and a migration compatibility policy.
 - Test clean installation and upgrade paths on Linux and macOS hosts.
 
@@ -28,13 +27,19 @@ timeline.
 
 ### Maintainability
 
+- Raise backend and frontend coverage floors by testing supported high-risk
+  paths first; do not exclude routed pages or consequential automation to
+  improve the percentage.
+- Declare expected non-success responses for every route, decide and enforce an
+  unknown-query-parameter policy, and enable the remaining Schemathesis status
+  and positive/negative data conformance checks. The current fuzz gate covers
+  safe methods, response shape, and server errors but is not full protocol
+  conformance.
 - Replace the inherited migration chain with a reviewed public schema baseline
   and a separate, tested upgrade path.
 - Remove legacy provider-shaped column names and unused hosted-product tables.
 - Remove dormant MCP compatibility code unless a supported sandboxed runtime is
   introduced.
-- Split the largest API, worker, and frontend modules into smaller owned
-  components.
 
 ### Product evidence
 

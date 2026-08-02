@@ -14,6 +14,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 22
+      - name: Validate local links, anchors, source paths, and code fences
+        run: python scripts/check_docs.py
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2@0.23.2
+      - name: Render every Mermaid diagram
+        run: ./scripts/check-mermaid.sh
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -41,9 +56,10 @@ jobs:
       - run: uv sync --frozen --extra dev
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
-      - run: uv run ty check --exit-zero-on-warning
+      - run: uv run ty check
       - run: uv run bandit -q -c pyproject.toml -r src/app
       - run: sh -n scripts/*.sh
+      - run: shellcheck scripts/*.sh
       - name: Audit locked production dependencies
         run: |
           uv export --frozen --no-dev --no-emit-project \
@@ -51,11 +67,44 @@ jobs:
           uv run pip-audit --strict --requirement /tmp/production-requirements.txt
       - run: uv run python -m scripts.export_openapi --check
       - run: uv run python -m scripts.evaluate validate-assets
-      - run: uv run pytest tests/unit tests/integration --tb=short
+      - name: Run backend tests with coverage
+        run: |
+          uv run pytest tests/unit tests/integration tests/evaluation --tb=short \
+            --cov=src/app --cov-branch --cov-report=xml
+          uv run python -m scripts.coverage_summary \
+            --xml coverage.xml --min-line-rate 0.85 --min-branch-rate 0.67
+
+  api-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: test
+      LOG_LEVEL: WARNING
+      LLM_PROVIDER: disabled
+      ANTHROPIC_API_KEY: ""
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+      REDIS_URL: redis://localhost:6379/0
+      CHAT_API_KEY: test-chat-api-key
+      TELEGRAM_BOT_TOKEN: test-value
+      TELEGRAM_ALLOWED_USER_IDS: "100001"
+      TELEGRAM_WEBHOOK_URL: https://example.com/webhook
+      TELEGRAM_WEBHOOK_SECRET: test-value
+      OLLAMA_HOST: ""
+      OTEL_ENABLED: "false"
+      WEB_PUSH_PUBLIC_KEY: ""
+      WEB_PUSH_PRIVATE_KEY: ""
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: Fuzz API contracts
+        run: uv run pytest tests/contract --tb=short
 
   frontend:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
@@ -72,22 +121,25 @@ jobs:
       - working-directory: frontend
         run: npm run lint
       - working-directory: frontend
-        run: npm run test
+        run: npm run test:coverage
       - working-directory: frontend
         run: npm run build
-      - name: Install pinned Chromium runtime
+      - name: Install pinned browser runtimes
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
-      - name: Run browser acceptance and accessibility suite
+        run: npm run test:e2e:install -- --with-deps
+      - name: Run cross-browser acceptance and accessibility suite
         working-directory: frontend
-        run: npm run test:e2e -- --project=chromium
+        run: npm run test:e2e
 
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
       POSTGRES_PASSWORD: ci-only-postgres-password-7db1382d
+      POSTGRES_ADMIN_PASSWORD: ci-only-admin-password-1a9f640c
+      POSTGRES_MIGRATOR_PASSWORD: ci-only-migrator-password-42dc085e
       CONNECTOR_TOKEN_ENCRYPTION_KEY: ci-only-connector-key-b30194bd
+      SOURCE_REVISION: ${{ github.sha }}
       LLM_PROVIDER: disabled
       OTEL_ENABLED: "false"
     steps:
@@ -164,6 +216,46 @@ jobs:
           ./scripts/restore-database.sh \
             /tmp/personal-execution-os-ci.dump \
             --confirm-destroy-local-data
+          curl --fail --silent --show-error \
+            --cookie /tmp/peos-cookies.txt \
+            http://127.0.0.1:8080/api/auth/session \
+            | jq --exit-status '.authenticated == true' >/dev/null
+      - name: Exercise complete local-state backup and restore
+        run: |
+          docker compose exec -T api sh -ec \
+            'printf "%s\n" PEOS_CI_APP_DATA_ORIGINAL > /var/lib/personal-execution-os/.ci-restore-marker'
+          docker compose down
+
+          local_state_archive=/tmp/personal-execution-os-ci-local-state.tar.gz
+          ./scripts/backup-local-state.sh "$local_state_archive"
+
+          printf '\nCI_RESTORE_SENTINEL=mutated\n' >> .env
+          printf '\nCI_RESTORE_SENTINEL_MUTATED\n' >> config/IDENTITY.local.md
+          docker run --rm --network none --read-only \
+            --volume personal-execution-os_app-data:/var/lib/personal-execution-os \
+            --entrypoint sh personal-execution-os-api:latest \
+            -ec 'printf "%s\n" PEOS_CI_APP_DATA_MUTATED > /var/lib/personal-execution-os/.ci-restore-marker'
+
+          ./scripts/restore-local-state.sh \
+            "$local_state_archive" \
+            --confirm-replace-local-state
+
+          test "$(
+            docker run --rm --network none --read-only \
+              --volume personal-execution-os_app-data:/var/lib/personal-execution-os:ro \
+              --entrypoint cat personal-execution-os-api:latest \
+              /var/lib/personal-execution-os/.ci-restore-marker
+          )" = "PEOS_CI_APP_DATA_ORIGINAL"
+          ! grep --quiet CI_RESTORE_SENTINEL .env
+          ! grep --quiet CI_RESTORE_SENTINEL_MUTATED config/IDENTITY.local.md
+          test "$(
+            find backups -maxdepth 1 \
+              -name 'pre-local-state-restore-*.tar.gz' \
+              -type f \
+              | wc -l
+          )" -eq 1
+
+          docker compose up --detach --wait
           curl --fail --silent --show-error \
             --cookie /tmp/peos-cookies.txt \
             http://127.0.0.1:8080/api/auth/session \

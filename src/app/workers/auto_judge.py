@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import structlog
 from anthropic import AsyncAnthropic
 
+from src.app.config import Settings
 from src.app.core.auto_judge import (
     score_interaction,
     summarize_specialist_dimensions,
@@ -50,7 +51,7 @@ async def run_auto_judge(ctx: dict) -> None:
     Called by ARQ cron. Processes up to batch_size records per run.
     Each record is scored independently — one failure doesn't block others.
     """
-    settings: object = ctx["settings"]
+    settings: Settings = ctx["settings"]
     session_factory = ctx["session_factory"]
 
     if not settings.auto_judge_enabled:

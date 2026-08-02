@@ -10,13 +10,30 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
 from src.app.config import Settings
 from src.app.persistence.repositories.interactions import get_interactions_for_export
 
+if TYPE_CHECKING:
+    from src.app.persistence.models import InteractionRecord
+
 logger = structlog.get_logger()
+
+
+def _complete_scores(
+    record: InteractionRecord,
+) -> tuple[float, float, float, float] | None:
+    """Return the four scores only when a record is fully judged."""
+    relevance = record.score_relevance
+    actionability = record.score_actionability
+    tone = record.score_tone
+    conciseness = record.score_conciseness
+    if relevance is None or actionability is None or tone is None or conciseness is None:
+        return None
+    return relevance, actionability, tone, conciseness
 
 
 async def run_eval_export(ctx: dict) -> None:
@@ -60,12 +77,14 @@ async def run_eval_export(ctx: dict) -> None:
     ]
 
     # Summary statistics
-    scored = [r for r in records if r.score_relevance is not None]
+    scored = [
+        (record, scores) for record in records if (scores := _complete_scores(record)) is not None
+    ]
     if scored:
-        avg_rel = sum(r.score_relevance for r in scored) / len(scored)
-        avg_act = sum(r.score_actionability for r in scored) / len(scored)
-        avg_tone = sum(r.score_tone for r in scored) / len(scored)
-        avg_conc = sum(r.score_conciseness for r in scored) / len(scored)
+        avg_rel = sum(scores[0] for _, scores in scored) / len(scored)
+        avg_act = sum(scores[1] for _, scores in scored) / len(scored)
+        avg_tone = sum(scores[2] for _, scores in scored) / len(scored)
+        avg_conc = sum(scores[3] for _, scores in scored) / len(scored)
         lines.extend(
             [
                 "## Summary Scores",
@@ -99,12 +118,14 @@ async def run_eval_export(ctx: dict) -> None:
 
     for record in records:
         scores_str = "not scored"
-        if record.score_relevance is not None:
+        record_scores = _complete_scores(record)
+        if record_scores is not None:
+            relevance, actionability, tone, conciseness = record_scores
             scores_str = (
-                f"rel={record.score_relevance:.2f} "
-                f"act={record.score_actionability:.2f} "
-                f"tone={record.score_tone:.2f} "
-                f"conc={record.score_conciseness:.2f}"
+                f"rel={relevance:.2f} "
+                f"act={actionability:.2f} "
+                f"tone={tone:.2f} "
+                f"conc={conciseness:.2f}"
             )
 
         feedback_str = record.feedback_rating or "none"

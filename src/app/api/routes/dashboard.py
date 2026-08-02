@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, TypedDict
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -28,6 +28,18 @@ _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 # Where the user is sent to repair an actionable connector failure.
 _RECONNECT_URL = "/connectors/google"
+ConnectorErrorCategory = Literal["token_expired", "rate_limited", "backend_error", "unknown"]
+
+
+class _ConnectorFailurePayload(TypedDict):
+    """Typed dashboard projection of a connector exception."""
+
+    status: Literal["error"]
+    category: ConnectorErrorCategory
+    message: str
+    actionable: bool
+    action_url: str | None
+
 
 # Per-category fallback copy used when the connector layer doesn't supply one.
 _CONNECTOR_MESSAGES: dict[str, dict[str, str]] = {
@@ -66,10 +78,11 @@ def _connector_failure_payload(
     *,
     connector: str,
     exc: ConnectorError,
-) -> dict[str, object]:
+) -> _ConnectorFailurePayload:
     """Build the structured failure payload exposed to the dashboard tile."""
-    category = exc.category
-    message = _CONNECTOR_MESSAGES.get(connector, {}).get(category) or str(exc)
+    raw_category = exc.category
+    category = _normalize_connector_error_category(raw_category)
+    message = _CONNECTOR_MESSAGES.get(connector, {}).get(raw_category) or str(exc)
     return {
         "status": "error",
         "category": category,
@@ -77,6 +90,17 @@ def _connector_failure_payload(
         "actionable": exc.actionable,
         "action_url": _RECONNECT_URL if exc.actionable else None,
     }
+
+
+def _normalize_connector_error_category(value: str) -> ConnectorErrorCategory:
+    """Map extension-defined connector categories into the public API contract."""
+    if value == "token_expired":
+        return "token_expired"
+    if value == "rate_limited":
+        return "rate_limited"
+    if value == "backend_error":
+        return "backend_error"
+    return "unknown"
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,9 @@
 """Scheduled tasks — morning briefing, evening review, weekly review."""
 
+from copy import copy
 from datetime import UTC, date, datetime, timedelta
+from math import isfinite
+from numbers import Real
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
@@ -10,6 +13,7 @@ from anthropic import APIError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.app.config import Settings
 from src.app.core.analytics import average_metric
 from src.app.core.async_utils import mapping_rows
 from src.app.core.conversation import ConversationContext
@@ -103,6 +107,35 @@ def _truncate_preview(text: str, limit: int = 90) -> str:
     if len(clean) <= limit:
         return clean
     return clean[: max(limit - 3, 1)].rstrip() + "..."
+
+
+def _review_key_insight(value: str | None) -> str:
+    """Return a useful review summary even when the model omits its optional insight."""
+    return value or "No key insight provided."
+
+
+def _goal_progress_percentage(value: object) -> int:
+    """Convert the persisted 0..1 goal ratio to a display percentage."""
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError(f"goal.progress must be numeric or None, got {type(value).__name__}")
+
+    normalized = float(value)
+    if not isfinite(normalized):
+        raise ValueError("goal.progress must be finite")
+    if not 0 <= normalized <= 1:
+        raise ValueError("goal.progress must be between 0 and 1")
+    return int(normalized * 100)
+
+
+def _nonnegative_int(value: object, field: str) -> int:
+    """Decode a non-negative counter returned by a raw SQL query."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{field} must be an integer, got {type(value).__name__}")
+    if value < 0:
+        raise ValueError(f"{field} must be non-negative")
+    return value
 
 
 async def _send_to_users(ctx: dict, message: str) -> None:
@@ -206,7 +239,8 @@ async def morning_briefing(ctx: dict) -> None:
         logger.error("morning_briefing_no_session_factory")
         return
 
-    settings = ctx.get("settings")
+    settings: Settings | None = ctx.get("settings")
+    planning_settings = settings
 
     now = datetime.now(tz=UTC)
 
@@ -218,6 +252,9 @@ async def morning_briefing(ctx: dict) -> None:
         user_tz = ZoneInfo(tz_str)
     except (ZoneInfoNotFoundError, ValueError):
         user_tz = ZoneInfo("UTC")
+        if settings is not None:
+            planning_settings = copy(settings)
+            planning_settings.user_timezone = "UTC"
 
     async with session_factory() as session:
         # Overdue commitments
@@ -289,9 +326,9 @@ async def morning_briefing(ctx: dict) -> None:
 
         day_plan = None
         carry_over_tasks: list[str] = []
-        if settings:
-            planning_owner_id = planning_owner_user_id(settings)
-            source_date = planning_source_date(settings)
+        if settings is not None and planning_settings is not None:
+            planning_owner_id = planning_owner_user_id(planning_settings)
+            source_date = planning_source_date(planning_settings)
             day_plan = await load_latest_day_plan(
                 session,
                 user_id=planning_owner_id,
@@ -332,7 +369,7 @@ async def morning_briefing(ctx: dict) -> None:
     if top_goals:
         lines.append("TOP GOALS:")
         for g in top_goals:
-            pct = int((g["progress"] or 0) * 100)
+            pct = _goal_progress_percentage(g["progress"])
             lines.append(f"  - {g['title']} ({pct}% complete)")
         lines.append("")
 
@@ -350,8 +387,8 @@ async def morning_briefing(ctx: dict) -> None:
     if active_habits:
         lines.append("HABIT STREAKS:")
         for h in active_habits:
-            streak = h["current_streak"]
-            best = h["longest_streak"]
+            streak = _nonnegative_int(h["current_streak"], "habit.current_streak")
+            best = _nonnegative_int(h["longest_streak"], "habit.longest_streak")
             freq = h["frequency"]
             streak_str = f"{streak} day{'s' if streak != 1 else ''}"
             best_str = f"best: {best}" if best > 0 else ""
@@ -393,12 +430,12 @@ async def morning_briefing(ctx: dict) -> None:
 
     await _send_to_users(ctx, briefing)
 
-    if settings and day_plan is None:
+    if settings is not None and planning_settings is not None and day_plan is None:
         try:
             conv_ctx = ConversationContext(redis_url=settings.redis_url.get_secret_value())
             await conv_ctx.set_pending_planning_session(
-                planning_owner_user_id(settings),
-                build_morning_planning_session(settings=settings),
+                planning_owner_user_id(planning_settings),
+                build_morning_planning_session(settings=planning_settings),
             )
         except Exception:
             logger.warning("morning_planning_session_seed_failed", exc_info=True)
@@ -499,7 +536,7 @@ async def weekly_review(ctx: dict) -> None:
 
     week_data_lines.append("Goals:")
     for g in all_goals:
-        pct = int((g["progress"] or 0) * 100)
+        pct = _goal_progress_percentage(g["progress"])
         week_data_lines.append(f"  - {g['title']}: {pct}% ({g['status']})")
     week_data_lines.append("")
 
@@ -532,9 +569,10 @@ async def weekly_review(ctx: dict) -> None:
 
         client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
         review = await generate_weekly_review(week_data, client)
+        key_insight = _review_key_insight(review.key_insight)
         logger.info(
             "weekly_review_generated",
-            key_insight_length=len(review.key_insight),
+            key_insight_length=len(key_insight),
             accomplishments=len(review.accomplishments),
             recommendations=len(review.recommendations),
         )
@@ -543,7 +581,7 @@ async def weekly_review(ctx: dict) -> None:
         week_str = week_start.strftime("%Y-%m-%d")
         now_str = now.strftime("%Y-%m-%d")
         review_lines = [f"Weekly Review: {week_str} — {now_str}\n"]
-        review_lines.append(f"Key Insight: {review.key_insight}\n")
+        review_lines.append(f"Key Insight: {key_insight}\n")
         if review.accomplishments:
             review_lines.append("Accomplishments:")
             for a in review.accomplishments:
@@ -624,7 +662,7 @@ async def monthly_review(ctx: dict) -> None:
 
     lines.append("Goals:")
     for g in all_goals:
-        pct = int((g["progress"] or 0) * 100)
+        pct = _goal_progress_percentage(g["progress"])
         lines.append(f"  - {g['title']}: {pct}% ({g['status']})")
     lines.append("")
 
@@ -647,13 +685,14 @@ async def monthly_review(ctx: dict) -> None:
             api_key=settings.anthropic_api_key.get_secret_value(),
         )
         review = await generate_monthly_review(month_data, client)
+        key_insight = _review_key_insight(review.key_insight)
         logger.info(
             "monthly_review_generated",
-            key_insight_length=len(review.key_insight),
+            key_insight_length=len(key_insight),
         )
 
         review_lines = [f"Monthly Review: {month_str}\n"]
-        review_lines.append(f"Key Insight: {review.key_insight}\n")
+        review_lines.append(f"Key Insight: {key_insight}\n")
         if review.accomplishments:
             review_lines.append("Accomplishments:")
             for a in review.accomplishments:
@@ -743,7 +782,7 @@ async def quarterly_review(ctx: dict) -> None:
 
     lines.append("Goals:")
     for g in all_goals:
-        pct = int((g["progress"] or 0) * 100)
+        pct = _goal_progress_percentage(g["progress"])
         lines.append(f"  - {g['title']}: {pct}% ({g['status']})")
     lines.append("")
 
@@ -771,13 +810,14 @@ async def quarterly_review(ctx: dict) -> None:
             api_key=settings.anthropic_api_key.get_secret_value(),
         )
         review = await generate_quarterly_review(quarter_data, client)
+        key_insight = _review_key_insight(review.key_insight)
         logger.info(
             "quarterly_review_generated",
-            key_insight_length=len(review.key_insight),
+            key_insight_length=len(key_insight),
         )
 
         review_lines = [f"Quarterly Review: {q_str}\n"]
-        review_lines.append(f"Key Insight: {review.key_insight}\n")
+        review_lines.append(f"Key Insight: {key_insight}\n")
         if review.lessons_learned:
             review_lines.append("Lessons Learned:")
             for lesson in review.lessons_learned:
@@ -867,7 +907,7 @@ async def annual_review(ctx: dict) -> None:
 
     lines.append("Goals:")
     for g in all_goals:
-        pct = int((g["progress"] or 0) * 100)
+        pct = _goal_progress_percentage(g["progress"])
         lines.append(f"  - {g['title']}: {pct}% ({g['status']})")
     lines.append("")
 
@@ -894,15 +934,16 @@ async def annual_review(ctx: dict) -> None:
             api_key=settings.anthropic_api_key.get_secret_value(),
         )
         review = await generate_annual_review(year_data, client)
+        key_insight = _review_key_insight(review.key_insight)
         logger.info(
             "annual_review_generated",
-            key_insight_length=len(review.key_insight),
+            key_insight_length=len(key_insight),
         )
 
         review_lines = [f"Annual Review: {year_str}\n"]
         if review.year_theme:
             review_lines.append(f"Theme: {review.year_theme}\n")
-        review_lines.append(f"Key Insight: {review.key_insight}\n")
+        review_lines.append(f"Key Insight: {key_insight}\n")
         if review.lessons_learned:
             review_lines.append("Lessons Learned:")
             for lesson in review.lessons_learned:

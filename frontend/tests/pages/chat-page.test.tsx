@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderWithProviders, screen } from "../test-utils";
+import { MemoryRouter } from "react-router";
+import { render, screen } from "@testing-library/react";
+import { renderWithProviders, userEvent, waitFor } from "../test-utils";
 import { ChatPage } from "@/pages/chat";
 
 const mocks = vi.hoisted(() => ({
@@ -84,5 +86,44 @@ describe("ChatPage", () => {
         onStop: expect.any(Function),
       }),
     );
+  });
+
+  it("consumes a prompt deep link and forwards privacy-control actions", async () => {
+    const user = userEvent.setup();
+    const setInputValue = vi.fn();
+    const toggleSensitiveMode = vi.fn();
+    const toggleSuppressedSource = vi.fn();
+    mocks.useChat.mockReturnValue({
+      messages: [],
+      isStreaming: false,
+      inputValue: "",
+      setInputValue,
+      sendMessage: vi.fn(),
+      stopStreaming: vi.fn(),
+      sensitiveMode: true,
+      suppressedSources: ["note"],
+      toggleSensitiveMode,
+      toggleSuppressedSource,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/chat?prompt=Plan%20privately"]}>
+        <ChatPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(setInputValue).toHaveBeenCalledWith("Plan privately");
+    });
+    expect(screen.getByRole("button", { name: "Hidden: Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Saved memories" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sensitive mode" }));
+    await user.click(screen.getByRole("button", { name: "Hidden: Notes" }));
+    await user.click(screen.getByRole("button", { name: "Saved memories" }));
+
+    expect(toggleSensitiveMode).toHaveBeenCalledOnce();
+    expect(toggleSuppressedSource).toHaveBeenCalledWith("note");
+    expect(toggleSuppressedSource).toHaveBeenCalledWith("saved_memory");
   });
 });

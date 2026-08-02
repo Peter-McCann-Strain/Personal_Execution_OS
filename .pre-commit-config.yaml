@@ -32,9 +32,15 @@ repos:
 
   - repo: local
     hooks:
+      - id: documentation-contract
+        name: documentation links, anchors, paths, and fences
+        entry: python scripts/check_docs.py
+        language: system
+        pass_filenames: false
+        files: \.md$
       - id: public-release-audit
         name: public release privacy audit
-        entry: python scripts/public_release_audit.py --root .
+        entry: python scripts/public_release_audit.py --root . --tracked-only --git-metadata
         language: system
         pass_filenames: false
         always_run: true

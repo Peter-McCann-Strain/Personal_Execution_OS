@@ -15,7 +15,8 @@ reliability for LLM judges.
 
 ## Specialist Dimension 1: Capture Precision
 
-- Q1: Did the agent save a durable signal (fact, preference, commitment) rather than transient chatter? Y/N
+- Q1: Did the agent save a durable signal (fact, preference, commitment)
+  rather than transient chatter? Y/N
 - Q2: Did it avoid over-capturing unrelated context alongside the target item? Y/N
 - Q3: Is the saved content a faithful representation of what the user said (not distorted)? Y/N
 - Q4: Did it preserve explicit preferences, deadlines, or commitments when present? Y/N

@@ -47,18 +47,19 @@ async def enqueue_agent_task(
         redis_settings = RedisSettings.from_dsn(settings.redis_url.get_secret_value())
         pool: ArqRedis = await create_pool(redis_settings)
 
-        enqueue_kwargs = {}
         if defer_by_seconds is not None:
-            enqueue_kwargs["_defer_by"] = timedelta(seconds=defer_by_seconds)
-
-        enriched_payload = _attach_request_id(payload)
-
-        await pool.enqueue_job(
-            "process_agent_task",
-            task_type,
-            enriched_payload,
-            **enqueue_kwargs,
-        )
+            await pool.enqueue_job(
+                "process_agent_task",
+                task_type,
+                _attach_request_id(payload),
+                _defer_by=timedelta(seconds=defer_by_seconds),
+            )
+        else:
+            await pool.enqueue_job(
+                "process_agent_task",
+                task_type,
+                _attach_request_id(payload),
+            )
         await pool.aclose()
     except Exception as exc:
         logger.error(

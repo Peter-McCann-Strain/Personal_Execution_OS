@@ -6,15 +6,19 @@ Personal Execution OS is experimental self-hosted software. It has not received
 an independent security audit and is not guaranteed suitable for high-risk,
 regulated, safety-critical, or multi-tenant use.
 
-The supported version is the latest revision on the default branch. Older
-revisions may not receive fixes.
+The supported version is the latest tagged public-preview release. The default
+branch is development code between releases, and older tags may not receive
+fixes.
 
 ## Reporting a vulnerability
 
 Do not open a public issue for a suspected vulnerability.
 
-Use GitHub's private vulnerability-reporting or Security Advisory feature for
-this repository. Include:
+Use GitHub's private vulnerability-reporting or Security Advisory feature when
+the published repository has it enabled. If it is unavailable, do not include
+vulnerability details in a public issue. Open a minimal issue asking the
+maintainer to provide a private reporting channel, or contact the maintainer
+through an already published private address. Include in the private report:
 
 - Affected revision or release
 - Impact and prerequisites
@@ -52,13 +56,16 @@ that violates its contractual controls.
 
 - Do not expose development servers directly to the internet.
 - Terminate TLS at a maintained reverse proxy.
+- Configure HSTS at that TLS terminator. Do not opt into subdomain coverage or
+  browser preload unless the whole domain satisfies that policy.
 - Restrict the API by network and application authentication.
 - Generate independent high-entropy secrets; never retain example values.
 - Use least-privilege database roles and private service networks.
 - Restrict connector scopes, redirect URLs, webhook origins, and allowed users.
-- Keep telemetry and issue-filing integrations disabled unless deliberately
-  configured.
-- Require human confirmation for consequential external actions.
+- Keep telemetry and issue-filing integrations disabled until you have
+  configured and reviewed them.
+- Require confirmation for each supported ad-hoc consequential mutation.
+  Documented automation may instead use a narrow standing opt-in.
 - Pin dependencies and container images for long-lived installations.
 - Back up encrypted data and test restoration.
 - Keep the host, database, browser, and dependencies patched.

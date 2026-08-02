@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.app.version import APP_VERSION
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -86,18 +88,15 @@ class Settings(BaseSettings):
     posthog_api_key: SecretStr = SecretStr("")
     posthog_host: str = "https://eu.i.posthog.com"
 
-    # --- OpenTelemetry (Phase 3.1) ---
-    # Fully optional — when ``otel_exporter_otlp_endpoint`` is empty the
-    # TracerProvider stays a no-op (NoOpTracer returned, zero overhead).
-    # See docs/OBSERVABILITY.md for Collector config + backend wiring.
+    # OpenTelemetry stays off unless it is enabled and an OTLP endpoint is
+    # configured. Collector configuration belongs to the operator.
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = ""
     otel_exporter_otlp_headers: str = ""
     otel_service_name: str = "personal-execution-os"
-    otel_service_version: str = "0.1.0"
-    # Head-sample ratio applied in-process. The real tail sampling (100% err,
-    # 100% slow, 10% head success) happens at the Collector — see the
-    # sample config in docs/OBSERVABILITY.md.
+    otel_service_version: str = APP_VERSION
+    # Head-sample ratio applied in this process. A downstream Collector may
+    # apply its own policy, which is outside this repository's configuration.
     otel_sampler_ratio: float = 0.1
     # Sampler identifier. Valid values: ``parentbased_always_on`` (default),
     # ``parentbased_traceidratio`` (uses otel_sampler_ratio), ``always_on``,
@@ -397,9 +396,8 @@ class Settings(BaseSettings):
     schema_drift_alerts_enabled: bool = False
     schema_drift_alert_window_hours: int = 24
     schema_drift_alert_threshold: int = 10
-    # Optional path to a JSON-lines structlog file. Empty = no log source wired
-    # up yet (the worker becomes a no-op until ingestion lands). See module
-    # docstring in src/app/workers/schema_drift_alerts.py for the contract.
+    # Optional path to a JSON-lines structlog file. Empty means the worker is a
+    # no-op. The default Compose logging driver does not create this file.
     schema_drift_alert_log_path: str = ""
 
     # --- Auto-issue from prod (P3.9) — GitHub issue fan-out for alerts ---
@@ -497,8 +495,8 @@ class Settings(BaseSettings):
 
     @property
     def posthog_configured(self) -> bool:
-        """Check if PostHog ingestion is configured."""
-        return bool(self.posthog_api_key.get_secret_value().strip())
+        """Check if PostHog ingestion has both a key and explicit destination."""
+        return bool(self.posthog_api_key.get_secret_value().strip() and self.posthog_host.strip())
 
     @property
     def otel_configured(self) -> bool:

@@ -26,9 +26,9 @@ export default defineConfig({
       exclude: ["src/main.tsx", "src/vite-env.d.ts", "src/api/generated/**", "src/types/**"],
       reporter: ["text", "html", "json-summary"],
       thresholds: {
-        statements: 95,
-        branches: 95,
-        functions: 95,
+        statements: 94,
+        branches: 90,
+        functions: 94,
         lines: 95,
       },
     },

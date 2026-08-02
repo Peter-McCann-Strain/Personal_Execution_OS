@@ -1,7 +1,7 @@
 """CLI tool for evaluation data flow — export interactions and store deep scores.
 
 Usage:
-    # Export interactions with auto-judge scores for Claude Code deep evaluation
+    # Export interactions with auto-judge scores for independent review
     uv run python -m scripts.evaluate export --agent diary --last 50
 
     # Export all agents
@@ -29,7 +29,7 @@ logger = structlog.get_logger()
 
 
 async def _export(args: argparse.Namespace) -> None:
-    """Export interactions to markdown for Claude Code deep evaluation."""
+    """Export interactions to Markdown for independent review."""
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,7 +93,7 @@ async def _export(args: argparse.Namespace) -> None:
             ]
         )
 
-    # Low-scoring interactions (flagged for Claude Code attention)
+    # Low-scoring interactions flagged for review
     low_scoring = [
         r
         for r in scored

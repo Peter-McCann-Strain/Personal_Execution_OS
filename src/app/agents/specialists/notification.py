@@ -12,6 +12,7 @@ No fallback. Fails loudly.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Awaitable
 from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -23,6 +24,14 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
 logger = structlog.get_logger()
+
+
+async def _resolve_redis_result(value: Awaitable[object] | object) -> object:
+    """Normalise redis-py's sync-or-async return annotation at one boundary."""
+    if isinstance(value, Awaitable):
+        return await value
+    return value
+
 
 # Redis key constants
 _REDIS_KEY_P2 = "fatigue:pending:p2"
@@ -86,7 +95,7 @@ class FatigueManager:
 
     async def _redis_push(self, key: str, notification: Notification) -> None:
         if self._redis:
-            await self._redis.rpush(key, self._serialise(notification))
+            await _resolve_redis_result(self._redis.rpush(key, self._serialise(notification)))
 
     async def _redis_flush(self, *keys: str) -> list[Notification]:
         """Atomically pop all items from the given Redis list keys."""
@@ -94,21 +103,32 @@ class FatigueManager:
             return []
         results: list[Notification] = []
         for key in keys:
-            items = await self._redis.lrange(key, 0, -1)
+            items = await _resolve_redis_result(self._redis.lrange(key, 0, -1))
+            if not isinstance(items, list):
+                raise TypeError("Redis lrange returned a non-list response")
             if items:
-                await self._redis.delete(key)
-                results.extend(self._deserialise(item) for item in items)
+                await _resolve_redis_result(self._redis.delete(key))
+                for item in items:
+                    if not isinstance(item, (str, bytes)):
+                        raise TypeError("Redis notification payload must be text or bytes")
+                    results.append(self._deserialise(item))
         return results
 
     async def _redis_record_dismissal(self, category: str) -> int:
         if self._redis:
-            count = await self._redis.hincrby(_REDIS_KEY_DISMISSALS, category, 1)
-            return int(count)
+            count = await _resolve_redis_result(
+                self._redis.hincrby(_REDIS_KEY_DISMISSALS, category, 1)
+            )
+            if not isinstance(count, int):
+                raise TypeError("Redis hincrby returned a non-integer response")
+            return count
         return 0
 
     async def _redis_get_dismissal(self, category: str) -> int:
         if self._redis:
-            val = await self._redis.hget(_REDIS_KEY_DISMISSALS, category)
+            val = await _resolve_redis_result(self._redis.hget(_REDIS_KEY_DISMISSALS, category))
+            if not isinstance(val, (str, bytes, type(None))):
+                raise TypeError("Redis hget returned an unsupported response")
             return int(val) if val else 0
         return 0
 

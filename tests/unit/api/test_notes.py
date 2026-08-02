@@ -16,6 +16,13 @@ from src.app.core.exceptions import EXCEPTION_STATUS_MAP, AppError, ErrorRespons
 from tests.unit.api.auth_helpers import override_current_principal
 
 
+def test_note_value_normalizers_reject_malformed_runtime_shapes() -> None:
+    from src.app.api.routes.notes import _dict_value, _iso_date_value
+
+    assert _dict_value({"valid": 1, 2: "invalid-key"}) == {"valid": 1}
+    assert _iso_date_value(MagicMock(isoformat="not-callable")) is None
+
+
 def _make_mock_note(
     *,
     note_id: uuid.UUID | None = None,

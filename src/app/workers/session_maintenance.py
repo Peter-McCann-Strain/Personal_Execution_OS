@@ -237,7 +237,7 @@ async def compact_stale_interaction_transcripts(
             updated += 1
 
     if updated:
-        await maybe_await(session.flush())
+        await session.flush()
     return updated
 
 
@@ -273,7 +273,7 @@ async def compact_stale_artifact_payloads(
         updated += 1
 
     if updated:
-        await maybe_await(session.flush())
+        await session.flush()
     return updated
 
 
@@ -288,7 +288,8 @@ async def delete_resolved_workflow_checkpoints(
         WorkflowCheckpoint.status != "pending",
     )
     result = await session.execute(stmt)
-    return int(result.rowcount or 0)
+    rowcount = getattr(result, "rowcount", None)
+    return rowcount if isinstance(rowcount, int) and rowcount > 0 else 0
 
 
 async def run_session_maintenance(ctx: dict) -> dict[str, Any]:

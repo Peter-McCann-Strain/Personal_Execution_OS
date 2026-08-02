@@ -356,6 +356,22 @@ def test_merge_persisted_artifacts_uses_compacted_preserved_payload_fields():
     assert any(item.value == "Project Atlas" for item in merged.active_entities)
 
 
+def test_normalized_artifact_payload_normalizes_runtime_mapping_keys():
+    """Persisted JSON-like mappings should expose a stable string-key contract."""
+    from src.app.core.state_packet import _normalized_artifact_payload
+
+    assert _normalized_artifact_payload({1: "value", "title": "Report"}) == {
+        "1": "value",
+        "title": "Report",
+    }
+    assert _normalized_artifact_payload(
+        {
+            "_compacted_by": "session_maintenance_v1",
+            "preserved": {2: "preserved"},
+        }
+    ) == {"2": "preserved"}
+
+
 def test_build_session_state_packet_filters_non_entity_fillers_and_dates():
     """Entity extraction should keep salient names and drop obvious junk phrases."""
     from src.app.core.state_packet import build_session_state_packet

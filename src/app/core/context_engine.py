@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +13,7 @@ from src.app.core.context_manager import AssembledContext, assemble_context
 from src.app.core.state_packet import packet_to_debug_dict, render_session_state_packet
 from src.app.domain.models import SessionStatePacket
 
-if False:  # pragma: no cover
+if TYPE_CHECKING:
     from anthropic import AsyncAnthropic
 
 

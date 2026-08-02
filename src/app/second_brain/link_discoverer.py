@@ -6,23 +6,21 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.async_utils import maybe_await
+from src.app.core.async_utils import mapping_rows
 
 logger = structlog.get_logger()
 
 
-async def _mapping_rows(result: object) -> list[dict]:
+async def _mapping_rows(result: object) -> list[dict[str, object]]:
     """Read SQLAlchemy mapping rows while tolerating AsyncMock-based test doubles."""
-    mappings = await maybe_await(result.mappings())
-    rows = await maybe_await(mappings.all())
-    return [dict(row) for row in rows]
+    return await mapping_rows(result)
 
 
 async def discover_links_by_entities(
     session: AsyncSession,
     note_id: uuid.UUID,
     limit: int = 5,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Find related notes via shared entity mentions (Phase 1 — no embeddings)."""
     result = await session.execute(
         text("""
@@ -52,7 +50,7 @@ async def discover_links_by_embedding(
     session: AsyncSession,
     note_id: uuid.UUID,
     limit: int = 5,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Find related notes via embedding similarity (Phase 2)."""
     result = await session.execute(
         text("""

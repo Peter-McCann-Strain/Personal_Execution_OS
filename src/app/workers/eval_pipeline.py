@@ -14,9 +14,8 @@ the pre-scored rows that ``auto_judge`` has already written. If Telegram is
 unconfigured, the summary is logged and the worker exits cleanly.
 
 Scores in ``interaction_records`` are on the 0.0-1.0 scale (auto-judge output).
-User-facing summaries present them on the 0-5 scale for readability, matching
-the wording in CLAUDE.md ("Diary 4.3/5"). Internal thresholds (4.0 warn, 0.3
-regression) follow that convention.
+User-facing summaries present them on the 0-5 scale for readability. Internal
+thresholds (4.0 warn, 0.3 regression) follow that convention.
 """
 
 from __future__ import annotations

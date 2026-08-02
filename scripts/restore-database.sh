@@ -2,8 +2,8 @@
 
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
 if [ "$#" -ne 2 ] || [ "$2" != "--confirm-destroy-local-data" ]; then
     echo "Usage: ./scripts/restore-database.sh BACKUP.dump --confirm-destroy-local-data" >&2
@@ -88,7 +88,7 @@ else
 fi
 
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
-    echo "Docker with Compose v2 is required." >&2
+    echo "Docker with the Compose plugin is required." >&2
     exit 1
 fi
 

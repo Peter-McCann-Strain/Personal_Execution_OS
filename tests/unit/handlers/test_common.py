@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -79,6 +80,37 @@ async def test_enqueue_entity_extraction_raises_on_import_error():
             ),
         ):
             await common_module.enqueue_entity_extraction("ep-789", "More text")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_agent_task_passes_typed_defer_interval():
+    mock_pool = AsyncMock()
+
+    with (
+        patch.object(common_module, "get_settings") as mock_settings,
+        patch(
+            "arq.connections.create_pool",
+            new_callable=AsyncMock,
+            return_value=mock_pool,
+        ),
+    ):
+        mock_settings.return_value = MagicMock(
+            redis_url=MagicMock(get_secret_value=lambda: "redis://localhost:6379")
+        )
+        await common_module.enqueue_agent_task(
+            "delayed_task",
+            {"item_id": "item-1"},
+            error_label="Delayed task",
+            defer_by_seconds=2.5,
+        )
+
+    mock_pool.enqueue_job.assert_awaited_once_with(
+        "process_agent_task",
+        "delayed_task",
+        {"item_id": "item-1"},
+        _defer_by=timedelta(seconds=2.5),
+    )
+    mock_pool.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

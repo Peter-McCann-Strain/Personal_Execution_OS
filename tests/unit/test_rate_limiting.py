@@ -2,7 +2,7 @@
 
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -194,3 +194,40 @@ async def test_redis_sliding_window_counter_uses_atomic_script():
     args = fake_redis.eval.await_args.args
     assert "ZREMRANGEBYSCORE" in args[0]
     assert args[2] == "rate_limit:api:key"
+    assert all(isinstance(arg, str) for arg in args[2:])
+
+
+@pytest.mark.asyncio
+async def test_redis_sliding_window_counter_accepts_sync_stub_result():
+    """Redis' declared sync-or-async result is handled at the client boundary."""
+    fake_redis = MagicMock()
+    fake_redis.eval.return_value = "0"
+    settings = SimpleNamespace(
+        redis_url=SimpleNamespace(get_secret_value=lambda: "redis://test"),
+    )
+
+    with (
+        patch("src.app.config.get_settings", return_value=settings),
+        patch("src.app.core.redis.get_redis_client", return_value=fake_redis),
+    ):
+        allowed = await RedisSlidingWindowCounter().is_allowed("api:key", 5, 60.0)
+
+    assert allowed is False
+    fake_redis.eval.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_redis_sliding_window_counter_rejects_unexpected_result():
+    """An invalid Redis response fails explicitly instead of being truthy by accident."""
+    fake_redis = MagicMock()
+    fake_redis.eval.return_value = object()
+    settings = SimpleNamespace(
+        redis_url=SimpleNamespace(get_secret_value=lambda: "redis://test"),
+    )
+
+    with (
+        patch("src.app.config.get_settings", return_value=settings),
+        patch("src.app.core.redis.get_redis_client", return_value=fake_redis),
+        pytest.raises(TypeError, match="Unexpected Redis rate-limit result"),
+    ):
+        await RedisSlidingWindowCounter().is_allowed("api:key", 5, 60.0)

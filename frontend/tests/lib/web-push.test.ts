@@ -100,6 +100,58 @@ describe("disconnectWebPushSubscription", () => {
     expect(unsubscribe).toHaveBeenCalledOnce();
   });
 
+  it("aggregates a server deletion failure after browser cleanup succeeds", async () => {
+    mocks.deleteWebPushSubscription.mockRejectedValue(new Error("server delete failed"));
+
+    await expect(disconnectWebPushSubscription(subscription)).rejects.toThrow(
+      "could not be fully disconnected",
+    );
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("treats a false browser unsubscribe result as a failed disconnection", async () => {
+    unsubscribe.mockResolvedValue(false);
+
+    await expect(disconnectWebPushSubscription(subscription)).rejects.toThrow(
+      "could not be fully disconnected",
+    );
+    expect(mocks.deleteWebPushSubscription).toHaveBeenCalledWith("subscription-1");
+  });
+
+  it("removes the server record when browser push APIs are unavailable", async () => {
+    Reflect.deleteProperty(window, "PushManager");
+
+    await disconnectWebPushSubscription(subscription);
+
+    expect(mocks.deleteWebPushSubscription).toHaveBeenCalledWith("subscription-1");
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("matches long browser endpoints using the privacy-preserving preview", async () => {
+    const endpoint = `https://push.example/${"a".repeat(60)}/subscription`;
+    const longSubscription = {
+      ...subscription,
+      endpoint_preview: `${endpoint.slice(0, 28)}...${endpoint.slice(-10)}`,
+    };
+    Object.defineProperty(navigator, "serviceWorker", {
+      value: {
+        ready: Promise.resolve({
+          pushManager: {
+            getSubscription: vi.fn().mockResolvedValue({
+              endpoint,
+              unsubscribe,
+            }),
+          },
+        }),
+      },
+      configurable: true,
+    });
+
+    await disconnectWebPushSubscription(longSubscription);
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
   it("disconnects the current browser subscription and its matching server record", async () => {
     await disconnectCurrentBrowserPushSubscription();
 
@@ -115,5 +167,56 @@ describe("disconnectWebPushSubscription", () => {
     );
     expect(unsubscribe).toHaveBeenCalledOnce();
     expect(mocks.deleteWebPushSubscription).not.toHaveBeenCalled();
+  });
+
+  it("returns cleanly when this browser has no push subscription", async () => {
+    Object.defineProperty(navigator, "serviceWorker", {
+      value: {
+        ready: Promise.resolve({
+          pushManager: {
+            getSubscription: vi.fn().mockResolvedValue(null),
+          },
+        }),
+      },
+      configurable: true,
+    });
+
+    await disconnectCurrentBrowserPushSubscription();
+
+    expect(mocks.listWebPushSubscriptions).not.toHaveBeenCalled();
+    expect(mocks.deleteWebPushSubscription).not.toHaveBeenCalled();
+  });
+
+  it("reports a false browser revocation result after removing the server record", async () => {
+    unsubscribe.mockResolvedValue(false);
+
+    await expect(disconnectCurrentBrowserPushSubscription()).rejects.toThrow(
+      "current browser push subscription was not fully removed",
+    );
+    expect(mocks.deleteWebPushSubscription).toHaveBeenCalledWith("subscription-1");
+  });
+
+  it("succeeds without server deletion when no listed record matches this browser", async () => {
+    mocks.listWebPushSubscriptions.mockResolvedValue([
+      {
+        ...subscription,
+        id: "other-browser",
+        endpoint_preview: "https://push.example/other",
+      },
+    ]);
+
+    await disconnectCurrentBrowserPushSubscription();
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(mocks.deleteWebPushSubscription).not.toHaveBeenCalled();
+  });
+
+  it("aggregates failure when matching server-record deletion fails", async () => {
+    mocks.deleteWebPushSubscription.mockRejectedValue(new Error("delete failed"));
+
+    await expect(disconnectCurrentBrowserPushSubscription()).rejects.toThrow(
+      "current browser push subscription was not fully removed",
+    );
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });

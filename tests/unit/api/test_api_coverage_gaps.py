@@ -494,6 +494,12 @@ def _make_mock_task(*, task_id=None, milestone_id=None, title="Task One", status
     return m
 
 
+def _make_task_update_result(task):
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = task
+    return result
+
+
 async def test_milestone_to_dto():
     """_milestone_to_dto converts a Milestone + tasks to MilestoneDTO (line 146)."""
     from src.app.api.routes.projects import _milestone_to_dto
@@ -630,7 +636,7 @@ async def test_update_task_with_title():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -657,7 +663,7 @@ async def test_update_task_with_estimate_hours():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -682,7 +688,7 @@ async def test_update_task_with_wsjf_score():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -707,7 +713,7 @@ async def test_update_task_with_context_tags():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -731,7 +737,7 @@ async def test_update_task_in_progress_status():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 
@@ -756,7 +762,7 @@ async def test_update_task_done_status():
 
     mock_session = AsyncMock()
     mock_session.get = AsyncMock(return_value=mock_task)
-    mock_session.execute = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=_make_task_update_result(mock_task))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
 

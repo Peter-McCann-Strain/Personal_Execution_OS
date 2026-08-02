@@ -1,6 +1,6 @@
 # Personal Execution OS Web
 
-Installable, responsive React PWA for the self-hosted Personal Execution OS.
+This directory contains the installable React PWA for Personal Execution OS.
 
 ## Authentication
 
@@ -46,12 +46,18 @@ npm run dev
 npm run test
 npm run lint
 npm run build
+npm run test:e2e:install
 npm run test:e2e
 ```
 
 `test:e2e` is the CI-gated browser acceptance, PWA, responsive interaction,
-and accessibility suite. `test:visual` is a separate snapshot-development
-command and is not currently a release gate. `capture:showcase` regenerates the
-reviewed, fixture-only mobile image used in the root README.
+and accessibility suite. It runs desktop Chromium, Firefox, and WebKit plus
+Pixel 7 Chromium and iPhone 15 WebKit emulation. The emulated mobile projects
+do not replace physical-device and assistive-technology review. `test:visual`
+is a separate snapshot-development command and is not currently a release gate.
+`capture:showcase` regenerates the reviewed, fixture-only mobile image used in
+the root README.
 
-The frontend expects the API under `/api`. Vite proxies `/api` and `/ws` to the local backend during development.
+The frontend expects the API under `/api`. Vite proxies `/api` to the local
+backend on port 8001 during development. Streaming uses server-sent events;
+the repository has no supported WebSocket endpoint.

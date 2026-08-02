@@ -8,12 +8,12 @@ from __future__ import annotations
 from typing import Literal
 
 import structlog
-from anthropic import APIError, AsyncAnthropic
+from anthropic import APIError
 from pydantic import BaseModel, Field
 
 from src.app.config import get_settings
 from src.app.core.exceptions import LLMError
-from src.app.core.llm_helpers import call_llm, parse_json_response
+from src.app.core.llm_helpers import LLMClient, call_llm, parse_json_response
 
 logger = structlog.get_logger()
 
@@ -76,7 +76,7 @@ Respond with JSON only:
 
 async def extract_entities(
     text: str,
-    client: AsyncAnthropic,
+    client: LLMClient,
     model: str | None = None,
     max_tokens: int | None = None,
 ) -> ExtractionResult:

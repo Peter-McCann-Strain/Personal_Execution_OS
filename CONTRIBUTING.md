@@ -26,40 +26,70 @@ Follow [docs/SETUP.md](docs/SETUP.md), then run the relevant checks:
 ```sh
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
-uv run ty check --exit-zero-on-warning
-uv run pytest tests/unit tests/integration
+uv run ty check
+uv run pytest tests/unit tests/integration tests/evaluation \
+  --cov=src/app --cov-branch --cov-report=xml
+uv run python -m scripts.coverage_summary \
+  --xml coverage.xml --min-line-rate 0.85 --min-branch-rate 0.67
+uv run pytest tests/contract
+uv run python -m scripts.export_openapi --check
+uv run python -m scripts.evaluate validate-assets
+uv run python -m scripts.check_docs
+sh -n scripts/*.sh
+shellcheck scripts/*.sh
+npx --yes markdownlint-cli2@0.23.2
+./scripts/check-mermaid.sh
 
 cd frontend
 npm run format:check
 npm run lint
 npm run test:coverage
 npm run build
+npm run test:e2e:install
+npm run test:e2e
 ```
+
+Docker is required for real-PostgreSQL integration tests and Compose smoke.
+The Playwright install command provisions Chromium, Firefox, and WebKit.
+`test:e2e` must pass in desktop Chromium, Firefox, and WebKit plus the configured
+mobile Chromium and mobile WebKit device profiles. For a focused change, run the
+smallest relevant test first; before a pull request, run every applicable
+command above.
+
+The coverage thresholds are checked-in no-regression floors, not a claim that
+every path is fully tested. New or changed behavior still needs focused tests.
 
 Before committing, run:
 
 ```sh
-python3 scripts/public_release_audit.py --root .
+python3 scripts/public_release_audit.py --root . --tracked-only --git-metadata
 uv run pre-commit run --all-files
 ```
 
-The release audit reports only categories and locations. Do not paste a
-detected value into an issue or pull request.
+The tracked-only audit is suitable after local setup because it ignores `.env`
+and other untracked runtime files. Before publishing a source snapshot, remove
+private runtime files and run the full working-tree and history checks in
+[Security](SECURITY.md#secret-handling). The audit reports only categories and
+locations. Do not paste a detected value into an issue or pull request.
 
 ## Pull request requirements
 
 - Add or update tests for behavior changes.
 - Document configuration, schema, migration, privacy, or operational changes.
 - Keep external integrations disabled by default.
-- Preserve human confirmation for consequential external actions.
+- Preserve per-action confirmation for ad-hoc consequential mutations.
+  Documented automation may instead use a narrow standing opt-in.
 - Avoid network calls in unit tests.
 - Regenerate checked-in API artifacts only from the sanitized source tree.
 - Explain new data collection, retention, logging, or third-party transmission.
+- Update `docs/API.md` for API behavior, `docs/CONFIGURATION.md` for settings,
+  `docs/OBSERVABILITY.md` for signals, and `docs/ACCESSIBILITY.md` for UI
+  contracts.
 - Confirm that no secret or personal-data scanner finding is being suppressed
   with a broad allowlist.
 
-Contributions intentionally submitted for inclusion are licensed under Apache
-License 2.0, as described in [LICENSE](LICENSE).
+By submitting a contribution for inclusion, you license it under Apache
+License 2.0 as described in [LICENSE](LICENSE).
 
 ## Review
 

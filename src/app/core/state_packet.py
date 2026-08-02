@@ -599,8 +599,8 @@ def _normalized_artifact_payload(payload: object) -> dict[str, Any]:
         return {}
     preserved = payload.get("preserved")
     if payload.get("_compacted_by") and isinstance(preserved, dict):
-        return preserved
-    return payload
+        return {str(key): value for key, value in preserved.items()}
+    return {str(key): value for key, value in payload.items()}
 
 
 def _response_envelope_texts(payload: dict[str, Any]) -> list[str]:

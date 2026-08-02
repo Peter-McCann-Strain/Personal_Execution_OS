@@ -7,12 +7,12 @@ import hashlib
 import time
 import uuid
 from functools import lru_cache
-from typing import Any, TypedDict
+from typing import Any
 
 import structlog
 from anthropic import AsyncAnthropic
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 from src.app.agents.specialists.communications import triage_email
 from src.app.agents.specialists.diary import process_diary_entry
@@ -54,45 +54,43 @@ class ShadowWorkflowOutcome(BaseModel):
     latency_ms: int | None = None
 
 
-class ShadowWorkflowState(TypedDict, total=False):
+class ShadowWorkflowState(BaseModel):
     """Minimal graph state for read-only shadow execution."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     route_message: str
     message: str
-    client: AsyncAnthropic
-    context_chunks: list[dict[str, Any]]
+    client: SkipValidation[AsyncAnthropic]
+    context_chunks: list[dict[str, Any]] = Field(default_factory=list)
     trace_recorder: TraceRecorder
-    parent_span_id: str | None
-    allowed_specialists: list[str]
-    intent: Intent
-    specialist: str
-    result: dict[str, Any]
-    executed: bool
-    skip_reason: str
+    parent_span_id: str | None = None
+    allowed_specialists: list[str] = Field(default_factory=list)
+    intent: Intent | None = None
+    specialist: str = ""
+    result: dict[str, Any] = Field(default_factory=dict)
+    executed: bool = False
+    skip_reason: str = ""
 
 
-async def _classify_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
-    recorder = state["trace_recorder"]
+async def _classify_node(state: ShadowWorkflowState) -> dict[str, object]:
+    recorder = state.trace_recorder
     with recorder.timed_span(
         name="shadow.classify",
         span_kind=TraceSpanKind.ROUTING,
-        parent_span_id=state.get("parent_span_id"),
+        parent_span_id=state.parent_span_id,
     ) as span:
-        intent = await classify_intent(state["route_message"], state["client"])
+        intent = await classify_intent(state.route_message, state.client)
         span["details"] = {
             "specialist": str(intent.specialist),
             "confidence": intent.confidence,
         }
-    return {
-        **state,
-        "intent": intent,
-        "specialist": str(intent.specialist),
-    }
+    return {"intent": intent, "specialist": str(intent.specialist)}
 
 
 def _route_to_specialist(state: ShadowWorkflowState) -> str:
-    specialist = str(state.get("specialist") or "").strip()
-    allowed = {value.strip() for value in state.get("allowed_specialists", []) if value.strip()}
+    specialist = state.specialist.strip()
+    allowed = {value.strip() for value in state.allowed_specialists if value.strip()}
     if not specialist:
         return "unsupported"
     if allowed and specialist not in allowed:
@@ -102,10 +100,10 @@ def _route_to_specialist(state: ShadowWorkflowState) -> str:
     return specialist
 
 
-async def _unsupported_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
-    recorder = state["trace_recorder"]
-    specialist = str(state.get("specialist") or "")
-    allowed = set(state.get("allowed_specialists", []))
+async def _unsupported_node(state: ShadowWorkflowState) -> dict[str, object]:
+    recorder = state.trace_recorder
+    specialist = state.specialist
+    allowed = set(state.allowed_specialists)
     if specialist and specialist not in _READ_ONLY_SPECIALISTS:
         reason = f"shadow_execution_not_supported_for_{specialist}"
     elif specialist and specialist not in allowed:
@@ -116,7 +114,7 @@ async def _unsupported_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
     with recorder.timed_span(
         name="shadow.execute.unsupported",
         span_kind=TraceSpanKind.SPECIALIST,
-        parent_span_id=state.get("parent_span_id"),
+        parent_span_id=state.parent_span_id,
         specialist=specialist or None,
     ) as span:
         span["status"] = TraceSpanStatus.DEGRADED
@@ -125,26 +123,22 @@ async def _unsupported_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
             "skip_reason": reason,
         }
 
-    return {
-        **state,
-        "executed": False,
-        "skip_reason": reason,
-    }
+    return {"executed": False, "skip_reason": reason}
 
 
 async def _execute_specialist(
     state: ShadowWorkflowState,
     *,
     specialist: str,
-) -> ShadowWorkflowState:
-    recorder = state["trace_recorder"]
-    client = state["client"]
-    message = state["message"]
+) -> dict[str, object]:
+    recorder = state.trace_recorder
+    client = state.client
+    message = state.message
 
     with recorder.timed_span(
         name=f"shadow.execute.{specialist}",
         span_kind=TraceSpanKind.SPECIALIST,
-        parent_span_id=state.get("parent_span_id"),
+        parent_span_id=state.parent_span_id,
         specialist=specialist,
     ) as span:
         if specialist == Specialist.DIARY.value:
@@ -153,7 +147,7 @@ async def _execute_specialist(
             result = (
                 await answer_from_memory(
                     message,
-                    state.get("context_chunks", []),
+                    state.context_chunks,
                     client,
                 )
             ).model_dump()
@@ -171,30 +165,26 @@ async def _execute_specialist(
             "result_preview": _preview_shadow_result(result),
         }
 
-    return {
-        **state,
-        "result": result,
-        "executed": True,
-    }
+    return {"result": result, "executed": True}
 
 
-async def _diary_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
+async def _diary_node(state: ShadowWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.DIARY.value)
 
 
-async def _memory_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
+async def _memory_node(state: ShadowWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.MEMORY.value)
 
 
-async def _review_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
+async def _review_node(state: ShadowWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.REVIEW.value)
 
 
-async def _project_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
+async def _project_node(state: ShadowWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.PROJECT.value)
 
 
-async def _communications_node(state: ShadowWorkflowState) -> ShadowWorkflowState:
+async def _communications_node(state: ShadowWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.COMMUNICATIONS.value)
 
 

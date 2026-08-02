@@ -2,8 +2,8 @@
 
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 ENV_FILE="$PROJECT_DIR/.env"
 IDENTITY_FILE="$PROJECT_DIR/config/IDENTITY.local.md"
 TEMP_ENV=""
@@ -25,8 +25,24 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! docker compose version >/dev/null 2>&1; then
-    echo "Docker Compose v2 is required." >&2
+if ! compose_version=$(docker compose version --short 2>/dev/null); then
+    echo "Docker Compose 2.24.0 or later is required." >&2
+    exit 1
+fi
+
+compose_version=${compose_version#v}
+compose_major=${compose_version%%.*}
+compose_remainder=${compose_version#*.}
+compose_minor=${compose_remainder%%.*}
+case "$compose_major:$compose_minor" in
+    *[!0-9:]* | : | *:)
+        echo "Could not parse Docker Compose version: $compose_version" >&2
+        exit 1
+        ;;
+esac
+if [ "$compose_major" -lt 2 ] ||
+    { [ "$compose_major" -eq 2 ] && [ "$compose_minor" -lt 24 ]; }; then
+    echo "Docker Compose 2.24.0 or later is required; found $compose_version." >&2
     exit 1
 fi
 

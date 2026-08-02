@@ -21,6 +21,7 @@ from src.app.domain.services.handlers._common import (
     enqueue_entity_extraction,
     enqueue_reflection_pack_refresh,
 )
+from src.app.persistence.models import Episode
 from src.app.persistence.repositories.episodes import create_episode, update_episode
 from src.app.second_brain.gtd_processor import process_gtd
 from src.app.second_brain.para_classifier import classify_para
@@ -123,7 +124,7 @@ async def handle_diary(
 
 
 async def _run_second_brain_enrichment(
-    episode: object,
+    episode: Episode,
     content: str,
     current_para: str | None,
     client: AsyncAnthropic,

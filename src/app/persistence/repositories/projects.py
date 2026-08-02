@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -28,12 +28,6 @@ async def _session_add(session: AsyncSession, instance: object) -> None:
     result = session.add(instance)
     if inspect.isawaitable(result):
         await result
-
-
-async def _maybe_await(value: object) -> object:
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 async def create_project(
@@ -143,7 +137,7 @@ async def create_task_dependency(
             TaskDependency.depends_on_task_id == depends_on_task_id,
         )
     )
-    dependency = await _maybe_await(existing.scalar_one_or_none())
+    dependency = existing.scalar_one_or_none()
     if dependency is not None:
         return dependency
 
@@ -203,7 +197,7 @@ async def update_task_status(
 
     stmt = update(Task).where(Task.id == task_id).values(**values).returning(Task)
     result = await session.execute(stmt)
-    task = await _maybe_await(result.scalar_one_or_none())
+    task = result.scalar_one_or_none()
     if task is None:
         msg = f"Task not found: {task_id}"
         raise ValueError(msg)
@@ -252,7 +246,7 @@ async def update_task(
 
     stmt = update(Task).where(Task.id == task_id).values(**updates).returning(Task)
     result = await session.execute(stmt)
-    task = await _maybe_await(result.scalar_one_or_none())
+    task = result.scalar_one_or_none()
     if task is None:
         msg = f"Task not found: {task_id}"
         raise ValueError(msg)
@@ -355,6 +349,60 @@ def _task_key(milestone_title: str, task_title: str) -> str:
     return f"{milestone_title.strip().casefold()}::{task_title.strip().casefold()}"
 
 
+def _validated_milestones(
+    value: object,
+    *,
+    draft_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """Validate the nested list/object shape before creating live records."""
+    if not isinstance(value, list) or not value:
+        msg = f"Project draft {draft_id} has no milestones to apply."
+        raise ValueError(msg)
+
+    milestones: list[dict[str, Any]] = []
+    for milestone_index, milestone in enumerate(value):
+        if not isinstance(milestone, dict):
+            msg = f"Project draft {draft_id} milestone {milestone_index + 1} must be an object."
+            raise ValueError(msg)
+        validated_milestone: dict[str, Any] = {}
+        for key, field_value in milestone.items():
+            if not isinstance(key, str):
+                msg = (
+                    f"Project draft {draft_id} milestone {milestone_index + 1} "
+                    "contains a non-string field name."
+                )
+                raise ValueError(msg)
+            validated_milestone[key] = field_value
+
+        tasks = validated_milestone.get("tasks", [])
+        if tasks is None:
+            tasks = []
+        if not isinstance(tasks, list):
+            msg = f"Project draft {draft_id} milestone {milestone_index + 1} tasks must be a list."
+            raise ValueError(msg)
+        validated_tasks: list[dict[str, Any]] = []
+        for task_index, task in enumerate(tasks):
+            if not isinstance(task, dict):
+                msg = (
+                    f"Project draft {draft_id} milestone {milestone_index + 1} "
+                    f"task {task_index + 1} must be an object."
+                )
+                raise ValueError(msg)
+            validated_task: dict[str, Any] = {}
+            for key, field_value in task.items():
+                if not isinstance(key, str):
+                    msg = (
+                        f"Project draft {draft_id} milestone {milestone_index + 1} "
+                        f"task {task_index + 1} contains a non-string field name."
+                    )
+                    raise ValueError(msg)
+                validated_task[key] = field_value
+            validated_tasks.append(validated_task)
+        validated_milestone["tasks"] = validated_tasks
+        milestones.append(validated_milestone)
+    return milestones
+
+
 async def apply_project_draft(
     session: AsyncSession,
     *,
@@ -367,10 +415,10 @@ async def apply_project_draft(
             return project
 
     breakdown = draft.breakdown or {}
-    milestones = breakdown.get("milestones")
-    if not isinstance(milestones, list) or not milestones:
-        msg = f"Project draft {draft.id} has no milestones to apply."
-        raise ValueError(msg)
+    milestones = _validated_milestones(
+        breakdown.get("milestones"),
+        draft_id=draft.id,
+    )
 
     project_summary = str(breakdown.get("project_summary") or draft.source_message or "").strip()
     critical_path = _coerce_str_list(breakdown.get("critical_path"))
@@ -414,7 +462,8 @@ async def apply_project_draft(
             success_criteria="\n".join(success_criteria) if success_criteria else None,
             order=milestone_index,
         )
-        for task_index, task_data in enumerate(milestone_data.get("tasks") or []):
+        tasks = milestone_data.get("tasks") or []
+        for task_index, task_data in enumerate(tasks):
             task_title = str(task_data.get("title") or f"Task {task_index + 1}").strip()
             task_risks = _coerce_str_list(task_data.get("risks"))
             dependency_titles = _coerce_str_list(task_data.get("depends_on"))
@@ -476,7 +525,7 @@ async def apply_project_draft(
 
     draft.status = "applied"
     draft.applied_project_id = project.id
-    draft.updated_at = datetime.utcnow()
+    draft.updated_at = datetime.now(UTC)
     await session.flush()
     logger.info(
         "project_draft_applied",

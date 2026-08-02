@@ -4,52 +4,89 @@ Personal Execution OS runs locally by default. Its optional integrations can
 send data to third parties. This guide explains what each integration receives
 and how to turn it off.
 
-Adding an API key means accepting that provider's terms, retention policy, and
-account settings. Those policies can change. Check the linked provider
-documentation before using an integration with sensitive material.
+When you add an API key, the provider's terms, retention policy, and account
+settings apply. Those policies can change, so check the linked provider
+documentation before sending sensitive material.
+
+Provider-policy links and retention claims were last reviewed on 2026-07-31.
+Re-check the linked primary sources before enabling a provider.
 
 ## Local copies
 
-Connector syncs create local copies in PostgreSQL and the application data
-volume. Revoking a provider token stops future access but does not remove those
-local records. Disconnect a connector in Settings to revoke its token and purge
-its connector records. To remove all application data, stop the stack and
-delete its Docker volumes as described in [SETUP.md](SETUP.md).
+Connector syncs create local copies in PostgreSQL. Revoking a provider token
+stops future access but does not remove those local records. A successful
+disconnect in Settings revokes the token before purging its connector records.
+If provider revocation fails, the endpoint returns an error and keeps the local
+token and records so you can retry. Revoke access in the provider account
+before treating the connection as closed. To remove all application data,
+follow the retirement procedure in [SETUP.md](SETUP.md).
 
 Browser data is separate. Use **Clear this device** in Settings on every browser
 that has used the application.
 
 ## Provider summary
 
-| Provider         | What is sent                                                 | Why                                       | Default |
-| ---------------- | ------------------------------------------------------------ | ----------------------------------------- | ------- |
-| Anthropic        | Prompts, selected context, and model parameters              | Optional model-backed chat and analysis   | Off     |
-| Google Workspace | OAuth credentials and Google API requests                    | Read-only Calendar, Gmail, and Drive sync | Off     |
-| Telegram         | Messages, attachments, chat metadata, and delivery requests  | Optional bot capture and notifications    | Off     |
-| Tavily           | Search queries and search options                            | Optional web research                     | Off     |
-| Sentry           | Errors and configured diagnostic context                     | Optional error monitoring                 | Off     |
-| PostHog          | Pseudonymous product events and configured properties        | Optional local-install analytics          | Off     |
-| OpenTelemetry    | Traces, metrics, and configured attributes                   | Optional operator observability           | Off     |
-| Web Push         | Push subscription details and a generic notification payload | Optional browser notifications            | Off     |
+All external providers are off by default unless the entry says "on demand."
+
+- **Anthropic:** prompts, selected context, and model parameters for optional
+  model-backed work.
+- **Google Workspace:** OAuth credentials and requests for read-only Calendar,
+  Gmail, and Drive sync.
+- **Telegram:** messages, attachments, chat metadata, and delivery requests
+  for optional capture and notifications.
+- **Tavily:** search queries and options for optional model-backed research.
+- **Sentry:** errors and operator-approved diagnostic context.
+- **PostHog:** configured product events. The default distinct ID is the
+  literal `anonymous`; an advanced installation salt makes it pseudonymous.
+- **OpenTelemetry:** spans and configured attributes sent to an
+  operator-chosen collector.
+- **Web Push:** subscription details and a generic encrypted notification
+  payload.
+- **GitHub:** quality issue text, labels, comments, and state for an explicitly
+  enabled issue filer.
+- **Healthchecks:** a request to the configured check URL for an optional
+  worker heartbeat.
+- **Supplied URL (on demand):** HTTP request and host metadata; returned page
+  content is parsed locally for user-directed extraction.
+- **RSS source (dormant):** feed-fetching code exists, but this release has no
+  supported configuration, schedule, enqueue path, or UI.
 
 ## Configuration checklist
 
-Configure one provider at a time with disposable data. Put values in the
-private root `.env`, run `docker compose up --build --detach --wait`, and use
-**Settings → Integrations** or the relevant feature page to test it. A key being
-accepted proves connectivity, not an approved privacy or cost policy.
+Configure one provider at a time and test it with disposable data. Put values
+in the private root `.env`, run
+`docker compose up --build --detach --wait`, then use
+**Settings > Integrations** or the relevant feature page. An accepted key
+proves connectivity. It says nothing about whether the privacy or cost policy
+is suitable for your installation.
 
-| Feature               | Required private values                                                                              | Additional setup                                                                              |
-| --------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Anthropic models      | `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`                                                        | Create a dedicated key and set a project spending limit in the provider console.              |
-| Local embeddings      | `OLLAMA_HOST`, optional `OLLAMA_EMBED_MODEL`                                                         | Run Ollama on the Docker host and pull the configured embedding model.                        |
-| Google read-only sync | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URL`                              | Enable Calendar, Gmail, and Drive APIs; create a Web OAuth client; connect from Settings.     |
-| Telegram              | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_SECRET` | Requires an externally reachable HTTPS webhook; startup registers the configured URL.         |
-| Tavily research       | `TAVILY_API_KEY`                                                                                     | Create a dedicated key and review plan or pay-as-you-go limits.                               |
-| Browser push          | `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT`                                    | Supply a VAPID key pair and subscribe each browser from Settings.                             |
-| Sentry                | `SENTRY_DSN`, keep `SENTRY_SEND_DEFAULT_PII=false`                                                   | Use a dedicated project and review event scrubbing and retention.                             |
-| PostHog               | `POSTHOG_API_KEY`, `POSTHOG_HOST`                                                                    | Use a dedicated project and review captured properties and retention.                         |
-| OpenTelemetry         | `OTEL_ENABLED=true`, `OTEL_EXPORTER_OTLP_ENDPOINT`, optional headers                                 | Approve the collector and keep `OTEL_EXPORT_CONTENT=false` unless content export is intended. |
+- **Anthropic models:** set `LLM_PROVIDER=anthropic` and
+  `ANTHROPIC_API_KEY`; use a dedicated key and a provider-side spending limit.
+- **Advanced embedding compatibility:** set `OLLAMA_HOST` and optionally
+  `OLLAMA_EMBED_MODEL`; run Ollama on the Docker host and pull that model.
+  This supports compatible query-time code and dataset curation, not a
+  fresh-install record-indexing workflow.
+- **Google read-only sync:** set the Google client ID, secret, redirect URL,
+  and `CONNECTOR_TOKEN_ENCRYPTION_KEY`; enable the three APIs and create a Web
+  OAuth client before connecting in Settings.
+- **Telegram capture:** set the bot token, user allowlist, HTTPS webhook URL,
+  and webhook secret, and enable Anthropic. Delivery-only worker alerts need
+  the token and allowlist but not a model.
+- **Tavily research:** set `TAVILY_API_KEY` and enable Anthropic; search feeds
+  a model-backed synthesis path.
+- **Browser push:** set the three `WEB_PUSH_*` values and subscribe each
+  browser in Settings.
+- **Sentry:** set `SENTRY_DSN`, keep `SENTRY_SEND_DEFAULT_PII=false`, and
+  review provider-side scrubbing and retention.
+- **PostHog:** set both `POSTHOG_API_KEY` and `POSTHOG_HOST`; review captured
+  properties and retention.
+- **OpenTelemetry:** set `OTEL_ENABLED=true`, the OTLP endpoint, and optional
+  headers. Keep content export off unless it is explicitly approved.
+- **GitHub issue filing:** set a token, exact repository, and
+  `GITHUB_ISSUE_FILER_ENABLED=true`. Restrict a fine-grained token to that
+  repository and Issues write access.
+- **Worker heartbeat:** set `HEALTHCHECKS_HEARTBEAT_URL`; the destination can
+  observe worker timing and the host request.
 
 The application does not manage provider subscriptions, invoices, retention,
 or account deletion. Remove credentials locally and revoke them at the provider
@@ -78,10 +115,10 @@ Anthropic account.
 ## Google Workspace
 
 Google integration uses OAuth and requests read-only access to Calendar, Gmail,
-and Drive. It sends OAuth credentials and ordinary Google API requests. Synced
-calendar and email records are stored locally. Drive sync can read file
-metadata and supported Docs, Sheets, Slides, or file content, then store
-searchable source-pack copies in PostgreSQL.
+and Drive. It sends OAuth credentials and Google API requests. Synced calendar
+and email records are stored locally. Drive sync can read file metadata and
+supported Docs, Sheets, Slides, or file content, then store searchable
+source-pack copies in PostgreSQL.
 
 For a local install, register this exact redirect URI in the Google OAuth Web
 client and set the same value in `.env`:
@@ -97,9 +134,11 @@ Google as restricted scopes; external or broadly distributed OAuth clients may
 require additional verification and security assessment. A personal testing
 client should remain limited to explicitly approved test users.
 
-Disconnecting Google in Settings attempts to revoke the provider token, then
-purges the locally stored token and connector data. If Google is unavailable,
-verify revocation in your Google Account before treating access as closed.
+Disconnecting Google in Settings revokes the provider token first and purges
+the local token and connector records only after revocation succeeds. If
+Google returns an error, the API returns `502` and keeps the local connection
+so the operation can be retried. Revoke access directly in the Google account
+when necessary, then retry or retire the whole local installation.
 
 - [Google Workspace API user data policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy)
 - [OAuth security practices](https://developers.google.com/identity/protocols/oauth2/resources/best-practices)
@@ -109,6 +148,10 @@ verify revocation in your Google Account before treating access as closed.
 
 Remove all `GOOGLE_*` values and `CONNECTOR_TOKEN_ENCRYPTION_KEY` from `.env`
 after disconnecting if the integration will not be used again.
+
+The retired `scripts/google_oauth.py` helper is not a supported path. It now
+fails closed because its former write-capable scopes and terminal token output
+contradicted the reviewed connector boundary.
 
 ## Telegram
 
@@ -125,8 +168,14 @@ TELEGRAM_WEBHOOK_URL=https://assistant.example.com/webhook/telegram
 Set `TELEGRAM_ALLOWED_USER_IDS` to the explicit numeric user IDs allowed to
 interact with the bot. Startup registers the webhook with
 `TELEGRAM_WEBHOOK_SECRET`; requests without the matching Telegram secret-token
-header are rejected. Do not expose the webhook from an uninitialized
-installation.
+header are rejected. API capture and replies initialize only when an Anthropic
+model provider is also configured. The worker can initialize Telegram for
+enabled notification delivery without a model, although briefings and reviews
+remain model/proactive-automation dependent. Do not expose the webhook from an
+uninitialized installation.
+
+Enabling a Telegram notification or alert job gives that job standing
+permission to send messages. It does not request confirmation for each event.
 
 - [Telegram privacy policy](https://www.telegram.org/privacy)
 - [Telegram Bot API documentation](https://core.telegram.org/bots)
@@ -148,6 +197,9 @@ retention unless your account agreement says so.
 Remove `TAVILY_API_KEY` and restart the stack to disable Tavily. Use Tavily's
 account controls for provider-side deletion.
 
+The supported research pipeline also requires an enabled model provider.
+Supplying only the Tavily key does not make the feature ready.
+
 ## Sentry
 
 Sentry is disabled when `SENTRY_DSN` is blank. If enabled, errors and diagnostic
@@ -163,10 +215,11 @@ stored events when it is no longer required.
 
 ## PostHog
 
-PostHog is disabled when `POSTHOG_API_KEY` is blank. If enabled, the application
-sends product events under an installation-scoped pseudonymous identifier. It
-does not need an email address or display name. Event retention depends on the
-PostHog deployment and plan.
+PostHog is disabled unless both `POSTHOG_API_KEY` and `POSTHOG_HOST` are set. If
+enabled, the application sends product events with the literal identifier
+`anonymous` by default. An advanced `TELEMETRY_INSTALLATION_SALT` changes that
+to a stable installation-scoped pseudonymous identifier. It does not send an
+email address or display name. Event retention depends on the destination.
 
 - [PostHog privacy policy](https://posthog.com/privacy)
 - [PostHog data collection controls](https://posthog.com/docs/privacy/data-collection)
@@ -177,8 +230,9 @@ PostHog project or events when they are no longer required.
 ## OpenTelemetry
 
 OpenTelemetry is disabled unless an exporter endpoint is configured. The
-operator controls that destination. Traces and metrics can contain route names,
-timings, identifiers, and other attributes added by instrumentation.
+operator controls that destination. The implementation exports traces, not an
+OpenTelemetry metrics pipeline. Spans can contain route names, timings,
+identifiers, and other attributes added by instrumentation.
 
 Content export is separately controlled by `OTEL_EXPORT_CONTENT` and is off by
 default. Keep it off unless the telemetry destination is approved to receive
@@ -189,6 +243,65 @@ application content.
 
 Remove the `OTEL_*` values and restart the stack to disable export. Delete data
 at the configured telemetry destination separately.
+
+## GitHub issue filing
+
+The optional issue filer can create, comment on, label, and close issues for
+quality signals. It is not a general-purpose GitHub tool. Setting
+`GITHUB_ISSUE_FILER_ENABLED=true` with a token and exact repository gives the
+worker standing permission to perform those actions. It does not ask for
+confirmation before each issue.
+
+Use a dedicated fine-grained token limited to the intended repository and the
+minimum Issues permission. GitHub documents endpoint permissions in its
+[fine-grained token permission reference](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens).
+
+Disable the feature, restart the worker, revoke the token at GitHub, and review
+or remove filed issues separately. Removing the local token does not delete
+provider-side issues or comments.
+
+## Healthchecks-compatible heartbeat
+
+When `HEALTHCHECKS_HEARTBEAT_URL` is configured, the worker periodically sends
+a request to that exact URL. The endpoint observes request timing and source
+network metadata. Treat the full check URL as a secret because it contains the
+check identifier.
+
+Healthchecks documents its
+[ping API](https://healthchecks.io/docs/http_api/) and
+[privacy policy](https://healthchecks.io/privacy/). The supported heartbeat
+path does not send a diagnostic body. Remove the URL and restart the worker to
+disable future pings.
+
+`HEALTHCHECKS_BACKUP_URL` exists as an inherited setting but is not used by the
+supported database backup script.
+
+## User-supplied URL fetching
+
+The save handler can fetch a URL the user explicitly supplies. The remote
+server sees a request from the installation's network and can return tracking,
+malformed, or prompt-injection content.
+
+The fetcher permits HTTP(S), rejects unsafe destination classes, checks every
+redirect, and limits request time and response size. These controls reduce
+server-side-request-forgery risk, but remote content remains untrusted.
+Extracted text is data. It cannot change policy or authorize a provider write.
+
+Avoid private, authenticated, one-time, or uniquely identifying URLs. There is
+no provider account to revoke; remove any saved local copy through the
+application and follow the remote site's deletion process if applicable.
+
+## Dormant RSS curation code
+
+The repository contains an RSS curation handler, but the public runtime has no
+supported UI, schedule, or enqueue path for it. It is dormant code, not an
+operator capability.
+
+If a future release enables it, each feed request will disclose host network
+metadata and returned content will be untrusted. The current handler uses
+`feedparser` directly and does not share the supplied-URL fetcher's complete
+destination validation. It must receive an SSRF review, an explicit opt-in
+gate, source management, deletion behavior, and tests before promotion.
 
 ## Web Push
 

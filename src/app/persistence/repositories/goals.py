@@ -11,6 +11,7 @@ import structlog
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import affected_rows
 from src.app.domain.constants import GoalStatus
 from src.app.persistence.models import Goal
 
@@ -148,7 +149,7 @@ async def delete_goal(
     """
     stmt = delete(Goal).where(Goal.id == goal_id)
     result = await session.execute(stmt)
-    deleted = result.rowcount > 0
+    deleted = affected_rows(result) > 0
     if deleted:
         logger.info("goal_deleted", goal_id=str(goal_id))
     return deleted

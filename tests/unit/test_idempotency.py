@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from starlette.responses import Response, StreamingResponse
 
 from src.app.api.idempotency import (
     IDEMPOTENCY_HEADER,
@@ -20,6 +21,7 @@ from src.app.api.idempotency import (
     MAX_KEY_LENGTH,
     IdempotencyMiddleware,
     _fingerprint,
+    _materialise_response_body,
     is_protected,
     mark_idempotent,
     protected_routes,
@@ -87,6 +89,27 @@ def test_constants_have_sane_defaults():
     assert IDEMPOTENCY_HEADER == "Idempotency-Key"
     assert MAX_FINGERPRINT_BYTES == 1 * 1024 * 1024
     assert MAX_KEY_LENGTH == 255
+
+
+async def test_materialise_response_body_accepts_only_supported_stream_chunks() -> None:
+    async def valid_chunks():
+        yield "text"
+        yield b"-bytes"
+        yield bytearray(b"-array")
+        yield memoryview(b"-view")
+
+    response = StreamingResponse(valid_chunks())
+    assert await _materialise_response_body(response) == b"text-bytes-array-view"
+    assert await _materialise_response_body(Response(b"plain")) == b"plain"
+
+
+async def test_materialise_response_body_rejects_chunks_that_bytes_would_silently_expand() -> None:
+    async def invalid_chunks():
+        yield 3
+
+    response = StreamingResponse(invalid_chunks())
+    with pytest.raises(TypeError, match="unsupported chunk type: int"):
+        await _materialise_response_body(response)
 
 
 @pytest.mark.parametrize(

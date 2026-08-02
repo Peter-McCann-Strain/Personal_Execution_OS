@@ -5,12 +5,11 @@ Uses LLM (Haiku) to extract commitments. No fallback.
 
 import anthropic
 import structlog
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, Field
 
 from src.app.config import get_settings
 from src.app.core.exceptions import LLMError
-from src.app.core.llm_helpers import call_llm, parse_json_response
+from src.app.core.llm_helpers import LLMClient, call_llm, parse_json_response
 
 logger = structlog.get_logger()
 
@@ -54,7 +53,7 @@ class ExtractedCommitment(BaseModel):
 
 async def extract_commitments(
     text: str,
-    client: AsyncAnthropic,
+    client: LLMClient,
     model: str | None = None,
     max_tokens: int | None = None,
 ) -> list[ExtractedCommitment]:

@@ -210,10 +210,14 @@ function CreateProjectModal({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-fg-tertiary)]">
+              <label
+                htmlFor="project-appetite"
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-fg-tertiary)]"
+              >
                 Appetite
               </label>
               <select
+                id="project-appetite"
                 value={appetite}
                 onChange={(event) => setAppetite(event.target.value as Appetite | "")}
                 className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-fg-primary)]"
@@ -225,10 +229,14 @@ function CreateProjectModal({
               </select>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-fg-tertiary)]">
+              <label
+                htmlFor="project-deadline"
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-fg-tertiary)]"
+              >
                 Deadline
               </label>
               <Input
+                id="project-deadline"
                 type="date"
                 value={deadline}
                 onChange={(event) => setDeadline(event.target.value)}

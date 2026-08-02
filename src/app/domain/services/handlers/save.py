@@ -652,7 +652,7 @@ async def _handle_url_save(
     *,
     client: AsyncAnthropic,
     session: AsyncSession,
-    url_match: re.Match[str],
+    url_match: re.Match[str] | None,
     message: MessageInput | None = None,
     action_id: str | None = None,
 ) -> ChatResponse:

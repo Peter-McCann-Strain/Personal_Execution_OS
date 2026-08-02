@@ -16,11 +16,14 @@ from typing import Any
 
 import structlog
 from anthropic import AsyncAnthropic
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.agents.socratic.analysis import analyse_tutorial, format_analysis_report
 from src.app.agents.socratic.graph import (
+    TutorialGraphState,
+    TutorialRuntimeContext,
     build_dialogue_graph,
     build_preparation_graph,
 )
@@ -44,6 +47,19 @@ logger = structlog.get_logger()
 # In-memory checkpoint saver for tutorial graph state.
 # Will be replaced with AsyncPostgresSaver in production.
 _checkpointer = InMemorySaver()
+
+
+def _stored_propositions(value: object) -> list[dict[str, Any]]:
+    """Normalize persisted JSON into the list-of-objects required by TutorialState."""
+    if not isinstance(value, list):
+        return []
+
+    propositions: list[dict[str, Any]] = []
+    for proposition in value:
+        if not isinstance(proposition, dict):
+            continue
+        propositions.append({str(key): field_value for key, field_value in proposition.items()})
+    return propositions
 
 
 async def handle_socratic(
@@ -159,9 +175,10 @@ async def start_tutorial(
     )
 
     # Load preparation data into state
-    if tutorial.propositions:
-        state["propositions"] = tutorial.propositions
-        state["claims_unresolved"] = list(tutorial.propositions)
+    propositions = _stored_propositions(tutorial.propositions)
+    if propositions:
+        state["propositions"] = propositions
+        state["claims_unresolved"] = [dict(proposition) for proposition in propositions]
     if tutorial.preparation:
         state["tutor_prep"] = tutorial.preparation.get("tutor_prep", {})
         state["devils_advocate_prep"] = tutorial.preparation.get("devils_advocate_prep", {})
@@ -172,8 +189,12 @@ async def start_tutorial(
     graph = build_dialogue_graph()
     compiled = graph.compile(checkpointer=_checkpointer)
 
-    config = {"configurable": {"thread_id": str(tutorial.id)}}
-    result = await compiled.ainvoke(state, config=config)
+    config: RunnableConfig = {"configurable": {"thread_id": str(tutorial.id)}}
+    result = await compiled.ainvoke(
+        TutorialGraphState.model_validate(state),
+        config=config,
+        context=TutorialRuntimeContext(client=client),
+    )
 
     # Extract the opening question from dialogue history
     dialogue = result.get("dialogue_history", [])
@@ -216,7 +237,7 @@ async def process_tutorial_turn(
 
     graph = build_dialogue_graph()
     compiled = graph.compile(checkpointer=_checkpointer)
-    config = {"configurable": {"thread_id": str(tutorial.id)}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(tutorial.id)}}
 
     from langgraph.types import Command
 
@@ -224,6 +245,7 @@ async def process_tutorial_turn(
     result = await compiled.ainvoke(
         Command(resume=user_message),
         config=config,
+        context=TutorialRuntimeContext(client=client),
     )
 
     # Check if tutorial is ending
@@ -296,7 +318,7 @@ async def end_tutorial(
     # Get the current state from the checkpointer
     graph = build_dialogue_graph()
     compiled = graph.compile(checkpointer=_checkpointer)
-    config = {"configurable": {"thread_id": str(tutorial.id)}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(tutorial.id)}}
 
     snapshot = await compiled.aget_state(config)
     state = snapshot.values if snapshot else {}
@@ -368,7 +390,10 @@ async def _run_preparation(
 
     graph = build_preparation_graph()
     compiled = graph.compile()
-    result = await compiled.ainvoke(state)
+    result = await compiled.ainvoke(
+        TutorialGraphState.model_validate(state),
+        context=TutorialRuntimeContext(client=client),
+    )
 
     # Store preparation in DB
     await store_preparation(

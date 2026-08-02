@@ -81,13 +81,16 @@ def _list_of_strings(value: object) -> list[str]:
 
 
 def _dict_value(value: object) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+    if not isinstance(value, dict):
+        return {}
+    return {key: item for key, item in value.items() if isinstance(key, str)}
 
 
 def _iso_date_value(value: object) -> str | None:
-    if hasattr(value, "isoformat"):
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
         try:
-            iso_value = value.isoformat()
+            iso_value = isoformat()
         except TypeError:
             return None
         return iso_value if isinstance(iso_value, str) else None

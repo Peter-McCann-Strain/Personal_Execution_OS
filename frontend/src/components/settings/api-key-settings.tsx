@@ -11,7 +11,8 @@ import { useAppStore } from "@/stores/app";
 
 function mask(value: string): string {
   if (!value) return "";
-  return `${value.slice(0, 8)}${"*".repeat(Math.max(0, value.length - 12))}${value.slice(-4)}`;
+  if (value.length < 20) return "*".repeat(value.length);
+  return `${value.slice(0, 4)}${"*".repeat(value.length - 8)}${value.slice(-4)}`;
 }
 
 function ApiKeySettings() {

@@ -1,0 +1,37 @@
+{
+  "config": {
+    "default": true,
+    "MD013": {
+      "line_length": 100,
+      "code_blocks": false,
+      "tables": false,
+      "headings": false
+    },
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD033": {
+      "allowed_elements": [
+        "br"
+      ]
+    }
+  },
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    ".git/**",
+    ".venv/**",
+    ".pytest_cache/**",
+    ".audit/**",
+    "backups/**",
+    "data/evaluation/exports/**",
+    "data/evaluation/reports/**",
+    "frontend/coverage/**",
+    "node_modules/**",
+    "frontend/node_modules/**",
+    "frontend/playwright-report/**",
+    "frontend/test-results/**",
+    "htmlcov/**"
+  ]
+}

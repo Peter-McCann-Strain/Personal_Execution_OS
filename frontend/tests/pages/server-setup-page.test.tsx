@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mocks = vi.hoisted(() => ({
@@ -71,5 +71,105 @@ describe("server owner setup", () => {
     );
 
     expect(await screen.findByText("Login landing")).toBeInTheDocument();
+  });
+
+  it("surfaces setup-status failures and still renders recovery context", async () => {
+    mocks.getSetupStatus.mockRejectedValue(new Error("backend unavailable"));
+    const { SetupPage } = await import("@/pages/setup");
+
+    render(
+      <MemoryRouter initialEntries={["/setup"]}>
+        <Routes>
+          <Route path="/setup" element={<SetupPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not check setup status. Confirm the backend is running.",
+    );
+    expect(
+      screen.getByText(/unique password stored in your password manager/i),
+    ).toBeInTheDocument();
+  });
+
+  it("validates minimum length and confirmation before owner creation", async () => {
+    const user = userEvent.setup();
+    const { SetupPage } = await import("@/pages/setup");
+    render(
+      <MemoryRouter initialEntries={["/setup"]}>
+        <SetupPage />
+      </MemoryRouter>,
+    );
+
+    const password = await screen.findByLabelText("Owner password");
+    const confirmation = screen.getByLabelText("Confirm password");
+    const form = screen.getByRole("button", { name: "Create owner and continue" }).closest("form");
+    expect(form).not.toBeNull();
+
+    await user.type(password, "too short");
+    await user.type(confirmation, "too short");
+    fireEvent.submit(form!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("at least 12 characters");
+
+    await user.clear(password);
+    await user.clear(confirmation);
+    await user.type(password, "a unique long password");
+    await user.type(confirmation, "a different password");
+    fireEvent.submit(form!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("passwords do not match");
+    expect(mocks.initializeOwner).not.toHaveBeenCalled();
+  });
+
+  it("toggles visibility for both password fields", async () => {
+    const user = userEvent.setup();
+    const { SetupPage } = await import("@/pages/setup");
+    render(
+      <MemoryRouter initialEntries={["/setup"]}>
+        <SetupPage />
+      </MemoryRouter>,
+    );
+
+    const password = (await screen.findByLabelText("Owner password")) as HTMLInputElement;
+    const confirmation = screen.getByLabelText("Confirm password") as HTMLInputElement;
+    expect(password.type).toBe("password");
+    expect(confirmation.type).toBe("password");
+
+    await user.click(screen.getByRole("button", { name: "Reveal passwords" }));
+    expect(password.type).toBe("text");
+    expect(confirmation.type).toBe("text");
+
+    await user.click(screen.getByRole("button", { name: "Hide passwords" }));
+    expect(password.type).toBe("password");
+    expect(confirmation.type).toBe("password");
+  });
+
+  it.each([
+    ["conflict", "Setup is already complete. Go to sign in."],
+    ["generic", "database unavailable"],
+    ["opaque", "Setup failed. Please try again."],
+  ])("keeps setup state intact when owner creation fails", async (failureKind, message) => {
+    const user = userEvent.setup();
+    const { ApiError: CurrentApiError } = await import("@/api/client");
+    mocks.initializeOwner.mockRejectedValue(
+      failureKind === "conflict"
+        ? new CurrentApiError(409, "already initialized")
+        : failureKind === "generic"
+          ? new Error("database unavailable")
+          : { provider_payload: "do not expose" },
+    );
+    const { SetupPage } = await import("@/pages/setup");
+    render(
+      <MemoryRouter initialEntries={["/setup"]}>
+        <SetupPage />
+      </MemoryRouter>,
+    );
+
+    await user.type(await screen.findByLabelText("Owner password"), "a unique long password");
+    await user.type(screen.getByLabelText("Confirm password"), "a unique long password");
+    await user.click(screen.getByRole("button", { name: "Create owner and continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByRole("heading", { name: "Create the owner account" })).toBeInTheDocument();
   });
 });

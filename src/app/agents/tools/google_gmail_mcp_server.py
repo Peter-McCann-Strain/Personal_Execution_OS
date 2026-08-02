@@ -1,10 +1,12 @@
 """Native Gmail MCP server backed by the in-repo Gmail client."""
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server import MCPServer
+from mcp.server.mcpserver import Context
 
 from src.app.agents.tools.email import GmailService
 from src.app.agents.tools.google_mcp_env import load_google_mcp_env
@@ -28,7 +30,7 @@ class GmailContext:
 
 
 @asynccontextmanager
-async def gmail_lifespan(_server: FastMCP) -> Any:
+async def gmail_lifespan(_server: MCPServer[GmailContext]) -> AsyncIterator[GmailContext]:
     service = _service_from_env()
     try:
         yield GmailContext(service=service)
@@ -36,16 +38,16 @@ async def gmail_lifespan(_server: FastMCP) -> Any:
         await service.close()
 
 
-mcp = FastMCP("Gmail", lifespan=gmail_lifespan)
+mcp: MCPServer[GmailContext] = MCPServer("Gmail", lifespan=gmail_lifespan)
 
 
-def _get_service(ctx: Context) -> GmailService:
+def _get_service(ctx: Context[GmailContext]) -> GmailService:
     return ctx.request_context.lifespan_context.service
 
 
 @mcp.tool()
 async def list_messages(
-    ctx: Context,
+    ctx: Context[GmailContext],
     query: str | None = None,
     max_results: int = 10,
 ) -> list[dict[str, Any]]:
@@ -58,7 +60,7 @@ async def list_messages(
 
 @mcp.tool()
 async def search_messages(
-    ctx: Context,
+    ctx: Context[GmailContext],
     query: str,
     max_results: int = 10,
 ) -> list[dict[str, Any]]:
@@ -67,13 +69,13 @@ async def search_messages(
 
 
 @mcp.tool()
-async def read_message(ctx: Context, message_id: str) -> dict[str, Any]:
+async def read_message(ctx: Context[GmailContext], message_id: str) -> dict[str, Any]:
     """Read a single message including decoded body text."""
     return await _get_service(ctx).get_email_detail(message_id)
 
 
 async def create_draft(
-    ctx: Context,
+    ctx: Context[GmailContext],
     to: str,
     subject: str,
     body: str,
@@ -90,7 +92,7 @@ async def create_draft(
 
 
 async def send_message(
-    ctx: Context,
+    ctx: Context[GmailContext],
     to: str,
     subject: str,
     body: str,
@@ -105,19 +107,19 @@ async def send_message(
 
 
 @mcp.tool()
-async def get_thread(ctx: Context, thread_id: str) -> list[dict[str, Any]]:
+async def get_thread(ctx: Context[GmailContext], thread_id: str) -> list[dict[str, Any]]:
     """Fetch all messages in a Gmail thread."""
     return await _get_service(ctx).get_thread(thread_id)
 
 
-async def mark_as_read(ctx: Context, message_id: str) -> dict[str, bool]:
+async def mark_as_read(ctx: Context[GmailContext], message_id: str) -> dict[str, bool]:
     """Remove the UNREAD label from a message."""
     await _get_service(ctx).mark_as_read(message_id)
     return {"success": True}
 
 
 async def add_label(
-    ctx: Context,
+    ctx: Context[GmailContext],
     message_id: str,
     label: str,
 ) -> dict[str, bool]:

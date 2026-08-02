@@ -739,6 +739,42 @@ def test_normalize_context_result_rejects_unknown_type():
         )
 
 
+def test_normalize_context_result_rejects_invalid_wrapper_fields():
+    """Duck-typed wrappers must contain the concrete context contract."""
+    from src.app.domain.services.chat import _normalize_context_result
+
+    with pytest.raises(TypeError, match="Unsupported context result type"):
+        _normalize_context_result(
+            SimpleNamespace(assembled=object(), inspection=object()),
+            conversation_messages=[],
+            conversation_summary="",
+            user_message="hi",
+        )
+
+
+def test_coerce_quality_record_ignores_non_callable_converter():
+    """A malformed plugin/test double cannot crash quality finalization."""
+    from src.app.domain.services.chat import _coerce_quality_record
+
+    evaluation = SimpleNamespace(
+        to_quality_record="not-callable",
+        context_quality=0.8,
+        tool_use_quality=None,
+        final_response_quality=0.9,
+        grounding=0.7,
+        channel_style=1.0,
+        passes=True,
+        issue="",
+        suggestion="",
+    )
+
+    quality = _coerce_quality_record(evaluation, route_quality=0.95)
+
+    assert quality.route_quality == 0.95
+    assert quality.context_quality == 0.8
+    assert quality.final_response_quality == 0.9
+
+
 @pytest.mark.asyncio
 async def test_process_message_conversation_context_failure_degrades():
     """process_message should degrade when conversation context retrieval fails."""

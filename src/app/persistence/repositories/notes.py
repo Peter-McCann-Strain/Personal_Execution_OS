@@ -10,9 +10,10 @@ from datetime import date
 from typing import Any
 
 import structlog
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import any_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import affected_rows, maybe_await
 from src.app.persistence.models import Note, NoteCanvas, NoteLink
 
 logger = structlog.get_logger()
@@ -26,23 +27,17 @@ async def _session_add(session: AsyncSession, instance: object) -> None:
         await result
 
 
-async def _maybe_await[T](value: T) -> T:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 async def _scalar_one_or_none(result: Any) -> Any:
-    return await _maybe_await(result.scalar_one_or_none())
+    return await maybe_await(result.scalar_one_or_none())
 
 
 async def _scalar_one(result: Any) -> Any:
-    return await _maybe_await(result.scalar_one())
+    return await maybe_await(result.scalar_one())
 
 
 async def _scalars_all(result: Any) -> list[Any]:
-    scalars = await _maybe_await(result.scalars())
-    rows = await _maybe_await(scalars.all())
+    scalars = await maybe_await(result.scalars())
+    rows = await maybe_await(scalars.all())
     return list(rows)
 
 
@@ -101,7 +96,7 @@ async def _find_note_by_reference(
         or_(
             func.lower(Note.title) == reference.casefold(),
             Note.slug == slug,
-            Note.aliases.any(reference),
+            any_(Note.aliases) == reference,
         ),
     )
     if exclude_note_id is not None:
@@ -344,7 +339,7 @@ async def delete_note(
     """Delete a note by ID. Returns True if deleted."""
     stmt = delete(Note).where(Note.id == note_id)
     result = await session.execute(stmt)
-    deleted = result.rowcount > 0
+    deleted = affected_rows(result) > 0
     if deleted:
         logger.info("note_deleted", note_id=str(note_id))
     return deleted

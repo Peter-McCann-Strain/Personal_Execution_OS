@@ -15,6 +15,7 @@ import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import affected_rows
 from src.app.persistence.models import DLQJob
 
 logger = structlog.get_logger()
@@ -121,7 +122,7 @@ async def mark_replayed(
         .values(replayed_at=now, replay_result=replay_result)
     )
     await session.flush()
-    return (result.rowcount or 0) > 0
+    return affected_rows(result) > 0
 
 
 async def delete_replayed_older_than(
@@ -137,4 +138,4 @@ async def delete_replayed_older_than(
         sql_delete(DLQJob).where(DLQJob.replayed_at.is_not(None)).where(DLQJob.failed_at <= cutoff)
     )
     await session.flush()
-    return int(result.rowcount or 0)
+    return affected_rows(result)

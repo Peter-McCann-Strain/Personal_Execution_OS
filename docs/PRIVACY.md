@@ -1,10 +1,9 @@
 # Privacy
 
-Personal Execution OS is software you operate. The project does not run a hosted
-service, receive your data, or control the infrastructure on which you deploy
-it. The person or organization operating an installation is responsible for its
-privacy notices, legal basis, access controls, retention, backups, and provider
-agreements.
+You operate Personal Execution OS on your own infrastructure. The project does
+not run a hosted service or receive your data. Whoever operates the
+installation is responsible for privacy notices, legal basis, access controls,
+retention, backups, and provider agreements.
 
 This document is an engineering description, not legal advice.
 
@@ -39,10 +38,10 @@ The repository ignores common runtime locations, but `.gitignore` is not a
 security boundary. Do not copy the whole working directory into a release or
 support bundle.
 
-The application does not encrypt PostgreSQL or Redis volumes itself. Use
+The application does not encrypt its PostgreSQL or Redis volumes. Use
 full-disk encryption on the host and encrypt every exported backup. Connector
-tokens are encrypted with the key in `.env`; ordinary application records are
-not field-encrypted.
+tokens are encrypted with the key in `.env`; application records are not
+field-encrypted.
 
 ## External disclosures
 
@@ -86,10 +85,24 @@ provider-retained data.
 An operator can access and modify records directly in the controlled database
 and through application interfaces exposed by the installed version.
 
-The in-app core-data export covers the record groups listed in its response. It
-is not a complete compliance archive and does not include every log, browser
-copy, file, backup, or provider record. A database backup is the authoritative
-full local record for disaster recovery.
+The in-app core-data export includes these account-scoped groups:
+
+- episodes, goals, notes, projects, and tasks;
+- contacts and interactions;
+- reviews, habits, decisions, and commitments;
+- saved memories.
+
+It excludes connector-provider data, uploaded or generated files, logs,
+caches, backups, browser copies, and external model-provider records. It is not
+a complete compliance or portability archive.
+
+A database backup contains the durable PostgreSQL records, but it is not a
+complete recovery package. Full recovery may also need `.env`, the
+connector-token encryption key, local identity, the application-data volume,
+and any operator-owned host or proxy configuration. Redis holds transient
+queues and continuity state that the database archive does not reproduce. See
+the [backup and recovery guide](BACKUP_AND_RECOVERY.md) and
+[architecture boundary](ARCHITECTURE.md#backup-and-recovery-boundary).
 
 This release does not present a one-click account-deletion workflow. The
 operator owns the installation and must remove the application's volumes and
@@ -97,16 +110,24 @@ the separate copies listed below. Deleting a primary record may not remove
 copies from backups, logs, browser caches, model-provider retention, or
 connector systems.
 
-A complete deletion process therefore includes:
+A complete deletion process includes:
 
 1. Stop new ingestion and scheduled actions.
 2. Revoke connectors, webhooks, sessions, push subscriptions, and credentials.
-3. Delete or anonymize application records.
-4. Use **Clear this device** on each browser, then delete runtime exports, logs,
-   screenshots, and other local copies.
-5. Apply the backup-retention and destruction policy.
-6. Submit deletion requests to external providers where required.
-7. Verify that scheduled jobs and telemetry no longer emit data.
+3. Delete or anonymize application records and remove Docker data volumes.
+4. Delete the live `.env` and `config/IDENTITY.local.md` after confirming that
+   their exact local copies are no longer required.
+5. Use **Clear this device** on each browser, then delete runtime exports, logs,
+   screenshots, traces, and other local copies.
+6. Apply the backup-retention and destruction policy to dumps, copied
+   `app-data`, private configuration, and off-host backups.
+7. Submit deletion requests to external providers where required.
+8. Verify that scheduled jobs and telemetry no longer emit data and that
+   intended paid accounts are closed.
+
+Follow the ordered [installation-retirement
+checklist](SETUP.md#retire-an-installation-and-remove-private-data) for exact
+repository-local targets and the distinction between stopping and deletion.
 
 ## Development and testing
 

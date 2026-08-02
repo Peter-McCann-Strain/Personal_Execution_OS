@@ -11,6 +11,15 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ROOT / "compose.yml"
 
 
+def test_start_script_enforces_compose_version_required_by_env_file_contract() -> None:
+    content = (ROOT / "scripts" / "start.sh").read_text(encoding="utf-8")
+
+    assert "docker compose version --short" in content
+    assert "Docker Compose 2.24.0 or later is required" in content
+    assert '"$compose_major" -eq 2' in content
+    assert '"$compose_minor" -lt 24' in content
+
+
 def test_root_compose_has_hardened_core_services() -> None:
     content = COMPOSE.read_text(encoding="utf-8")
 
@@ -126,6 +135,7 @@ def test_web_proxy_rejects_unknown_host_headers() -> None:
     assert "return 421;" in site
     assert 'server_name localhost 127.0.0.1 "[::1]" ${PUBLIC_HOSTNAME};' in site
     assert "PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-}" in compose
+    assert "Strict-Transport-Security" not in site
     assert "*[!A-Za-z0-9.-]* | .* | *. | *..*)" in entrypoint
     assert "envsubst '${PUBLIC_HOSTNAME}'" in entrypoint
 

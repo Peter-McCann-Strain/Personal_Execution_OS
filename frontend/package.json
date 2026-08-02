@@ -1,7 +1,7 @@
 {
   "name": "personal-execution-os-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "engines": {
     "node": ">=22.22 <23 || >=24"
@@ -19,7 +19,7 @@
     "test:e2e": "playwright test a11y.spec.ts critical-path.spec.ts pwa.spec.ts today-cockpit.spec.ts workbench.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
-    "test:e2e:install": "playwright install chromium",
+    "test:e2e:install": "playwright install chromium firefox webkit",
     "test:a11y": "playwright test a11y.spec.ts",
     "test:visual": "playwright test visual.spec.ts",
     "capture:showcase": "CAPTURE_SHOWCASE=1 playwright test showcase.spec.ts --project=chromium",

@@ -187,7 +187,7 @@ def test_sentry_configured_true_for_valid_dsn():
 
 
 def test_posthog_configured_true_when_api_key_present():
-    """PostHog should be treated as configured when an API key is present."""
+    """PostHog needs an API key and the default explicit destination."""
     env = {
         **_base_env(),
         "POSTHOG_API_KEY": "phc_test_key",
@@ -196,6 +196,19 @@ def test_posthog_configured_true_when_api_key_present():
         settings = Settings(_env_file=None)
 
     assert settings.posthog_configured is True
+
+
+def test_posthog_configured_false_when_host_is_blank():
+    """A key without an approved destination must fail closed."""
+    env = {
+        **_base_env(),
+        "POSTHOG_API_KEY": "phc_test_key",
+        "POSTHOG_HOST": "",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        settings = Settings(_env_file=None)
+
+    assert settings.posthog_configured is False
 
 
 def test_workflow_shadow_specialists_are_normalized():

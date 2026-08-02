@@ -13,12 +13,12 @@ occurrences have been recorded, sends a single distinct Telegram alert per
 ``(table, column)`` pair so the operator can run the corresponding
 ``alembic upgrade``.
 
-Implementation note (TODO — log ingestion):
-    Production stdout logs are JSON via structlog but are not currently
-    collected into a queryable store. Until a sink (Loki / journald JSON
-    cursor / Sentry breadcrumbs) is wired up, :func:`scan_log_source` will
-    return an empty iterable and this worker is effectively a no-op alert.
-    The contract is:
+Log-source contract:
+    The checked-in adapter reads a JSON-lines structlog file configured through
+    ``SCHEMA_DRIFT_ALERT_LOG_PATH``. The default Compose stack writes container
+    logs through Docker's logging driver instead of mounting such a file, so
+    this alert remains a no-op unless an operator deliberately supplies one.
+    A future Loki, journald, or Sentry adapter must preserve the same contract:
 
       * read structlog JSON records since ``cutoff``
       * yield :class:`SchemaDriftHit` for any record whose ``exception`` /
@@ -118,11 +118,7 @@ def scan_log_source(
     *,
     settings: Settings,
 ) -> Iterator[SchemaDriftHit]:
-    """Yield schema-drift log records since ``cutoff``.
-
-    Stub implementation — see module docstring. Returns empty until a
-    log-ingestion adapter (Loki / journald / Sentry) is wired in.
-    """
+    """Yield schema-drift log records since ``cutoff`` from the configured file."""
     log_path = getattr(settings, "schema_drift_alert_log_path", None)
     if not log_path:
         logger.debug(

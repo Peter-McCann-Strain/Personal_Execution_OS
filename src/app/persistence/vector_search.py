@@ -5,8 +5,7 @@ It must be set on the same connection that runs the vector query, and
 ``SET LOCAL`` keeps the change scoped to the enclosing transaction so
 sibling sessions aren't affected.
 
-Two presets are defined here, matching the agent-specific expectations
-laid out in research/17_WORLD_CLASS_PLAN_V2.md:
+Two presets encode the current latency-versus-recall expectations:
 
 * ``Preset.MEMORY`` (``ef_search = 20``) — latency-sensitive paths such as
   the Memory specialist's just-in-time recall. We tolerate ~5 % recall
@@ -15,8 +14,9 @@ laid out in research/17_WORLD_CLASS_PLAN_V2.md:
   as the Research specialist and weekly-review aggregators. We want near-
   exhaustive recall and can absorb the extra 10-30 ms.
 
-``Preset.DEFAULT`` (``ef_search = 40``) matches pgvector 0.8.0's
-recommended starting point and is used when no preset is specified.
+``Preset.DEFAULT`` (``ef_search = 40``) is the project's neutral starting
+point and is used when no preset is specified. Re-benchmark these values
+against representative fictional data before changing them.
 
 Usage
 -----

@@ -22,7 +22,8 @@ reliability for LLM judges.
 
 ## Specialist Dimension 2: Bloom Progression Quality
 
-- Q1: Is the cognitive level (recall / apply / analyse / evaluate / create) appropriate for where the learner is? Y/N
+- Q1: Is the cognitive level (recall / apply / analyse / evaluate / create)
+  appropriate for where the learner is? Y/N
 - Q2: Does the response avoid jumping to advanced synthesis before basics are secure? Y/N
 - Q3: Does it pace the progression (one step up, not several)? Y/N
 - Q4: Does it check understanding before moving to the next level? Y/N

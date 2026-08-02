@@ -87,4 +87,5 @@ the community for a specified period.
 
 This Code of Conduct is adapted from the [Contributor
 Covenant](https://www.contributor-covenant.org), version 2.1, available at
-https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.
+[the Contributor Covenant 2.1
+text](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html).

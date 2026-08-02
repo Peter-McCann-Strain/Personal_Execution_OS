@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.app.domain.constants import ProjectStatus, TaskStatus
-from src.app.persistence.models import Epic, Milestone, Project, Task
+from src.app.persistence.models import Epic, Milestone, Project, ProjectDraft, Task
 from src.app.persistence.repositories.projects import (
+    apply_project_draft,
     create_epic,
     create_milestone,
     create_project,
@@ -66,6 +67,35 @@ def _make_task(**overrides) -> Task:
     t.created_at = overrides.get("created_at", datetime.now(UTC))
     t.updated_at = overrides.get("updated_at", datetime.now(UTC))
     return t
+
+
+@pytest.mark.parametrize(
+    ("milestones", "error"),
+    [
+        (["not-an-object"], "milestone 1 must be an object"),
+        ([{"tasks": "not-a-list"}], "milestone 1 tasks must be a list"),
+        ([{"tasks": ["not-an-object"]}], "milestone 1 task 1 must be an object"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_apply_project_draft_rejects_malformed_nested_records_before_mutation(
+    milestones: list[object],
+    error: str,
+) -> None:
+    """Malformed JSON drafts fail before any live project records are staged."""
+    session = _make_session()
+    draft = ProjectDraft(
+        user_id="user-1",
+        title="Malformed draft",
+        breakdown={"milestones": milestones},
+    )
+    draft.id = uuid.uuid4()
+
+    with pytest.raises(ValueError, match=error):
+        await apply_project_draft(session, draft=draft)
+
+    session.add.assert_not_called()
+    session.flush.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

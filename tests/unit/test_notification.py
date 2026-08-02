@@ -1,7 +1,7 @@
 """Tests for notification fatigue management."""
 
 from datetime import UTC, datetime, time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -435,10 +435,35 @@ def _make_mock_redis():
     return redis
 
 
+def _make_sync_mock_redis():
+    """Model redis-py's declared sync-or-async response contract."""
+    redis = MagicMock()
+    redis.rpush.return_value = 1
+    redis.lrange.return_value = []
+    redis.delete.return_value = 1
+    redis.hincrby.return_value = 3
+    redis.hget.return_value = b"3"
+    return redis
+
+
 def _make_redis_manager():
     """Create a FatigueManager with a mock Redis client."""
     redis = _make_mock_redis()
     return FatigueManager(dnd_start=time(22, 0), dnd_end=time(7, 0), redis=redis), redis
+
+
+@pytest.mark.asyncio
+async def test_redis_declared_sync_responses_are_normalised() -> None:
+    """Redis annotations permit immediate values; the manager handles both forms."""
+    redis = _make_sync_mock_redis()
+    mgr = FatigueManager(dnd_start=time(22, 0), dnd_end=time(7, 0), redis=redis)
+
+    await mgr.queue_for_batch(_make_notification(Priority.P2_NORMAL))
+    await mgr.record_dismissal("deadline")
+
+    assert await mgr.is_category_suppressed("deadline") is True
+    redis.rpush.assert_called_once()
+    redis.hincrby.assert_called_once()
 
 
 @pytest.mark.asyncio

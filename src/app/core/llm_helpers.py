@@ -23,12 +23,13 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import Literal, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import anthropic
 import httpx
 import structlog
+from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ValidationError
 from tenacity import (
     before_sleep_log,
@@ -46,13 +47,11 @@ from src.app.core.personality import get_personality_prefix
 from src.app.core.pii_redactor import redact
 from src.app.core.response_style import get_response_style_prefix
 
-if TYPE_CHECKING:
-    from anthropic import AsyncAnthropic
-
 logger_retry = logging.getLogger("llm_retry")
 logger = structlog.get_logger()
 
 T = TypeVar("T", bound=BaseModel)
+LLMClient = AsyncAnthropic | BaseLLMProvider
 
 # Type alias for the system prompt: callers may pass a plain string (auto-wrapped
 # with cache_control) or a pre-built list of content blocks.
@@ -164,11 +163,8 @@ def _flatten_message_content(content: object) -> str:
     if isinstance(content, list):
         parts: list[str] = []
         for block in content:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    parts.append(str(block.get("text", "")))
-                elif "text" in block:
-                    parts.append(str(block["text"]))
+            if isinstance(block, dict) and (block.get("type") == "text" or "text" in block):
+                parts.append(str(block.get("text", "")))
         return "\n".join(parts)
     return str(content)
 
@@ -392,7 +388,7 @@ def _build_system_blocks(
     reraise=True,
 )
 async def call_llm(
-    client: AsyncAnthropic,
+    client: LLMClient,
     *,
     model: str,
     max_tokens: int,
@@ -677,7 +673,7 @@ def parse_json_response(response, error_context: str = "LLM") -> dict:
 
 
 async def call_and_parse(
-    client: AsyncAnthropic,
+    client: LLMClient,
     *,
     model: str,
     max_tokens: int,
@@ -727,7 +723,7 @@ async def call_and_parse(
 
 
 async def call_and_parse_with_retry(
-    client: AsyncAnthropic,
+    client: LLMClient,
     *,
     model: str,
     max_tokens: int,
@@ -827,7 +823,7 @@ async def call_and_parse_with_retry(
 
 
 async def call_and_extract_text(
-    client: AsyncAnthropic,
+    client: LLMClient,
     *,
     model: str,
     max_tokens: int,

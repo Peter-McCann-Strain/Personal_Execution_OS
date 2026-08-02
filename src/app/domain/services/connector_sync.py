@@ -244,9 +244,6 @@ async def sync_connector_account(
                 created_or_updated += 1
         finally:
             await service.close()
-    elif account.connector_type == "tavily":
-        msg = f"Connector sync is not implemented for {account.connector_type}"
-        raise NotImplementedError(msg)
     else:
         msg = f"Unsupported connector type: {account.connector_type}"
         raise ValueError(msg)
@@ -263,7 +260,6 @@ def connector_default_display_name(connector_type: str) -> str:
         "gmail": "Gmail",
         "google_calendar": "Google Calendar",
         "google_drive": "Google Drive",
-        "tavily": "Tavily",
     }
     return labels.get(connector_type, connector_type.replace("_", " ").title())
 

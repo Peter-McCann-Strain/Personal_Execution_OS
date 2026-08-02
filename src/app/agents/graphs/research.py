@@ -21,12 +21,12 @@ Reflection design (2026 best practice):
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 
 import structlog
 from anthropic import AsyncAnthropic
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.app.agents.prompts.research import REFLECTION_PROMPT
 from src.app.agents.specialists.research import (
@@ -75,34 +75,59 @@ class ResearchCritique(BaseModel):
     rationale: str
 
 
-class ResearchState(TypedDict, total=False):
-    """State for the research subgraph."""
+class ResearchState(BaseModel):
+    """Validated research state whose explicitly set fields form node updates.
 
-    question: str
-    queries: list[str]
-    raw_results: list[dict]
-    result: Any
-    client: Any
-    search: Any
+    Fields default to ``None`` so LangGraph's Pydantic update extractor does not
+    overwrite durable state with an unset model default during reflection loops.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    question: str | None = None
+    queries: list[str] | None = None
+    raw_results: list[dict[str, Any]] | None = None
+    result: dict[str, Any] | None = None
+    client: Any = None
+    search: Any = None
     # --- reflection ---
     # Current iteration count — incremented each time ``reflect_node`` runs.
     # Starts at 0 before the first reflection pass.
-    reflection_count: int
+    reflection_count: int | None = None
     # Most recent critique — kept on state so the revision path can read it.
-    critique: Any
+    critique: dict[str, Any] | None = None
     # Hard cap on reflection loops.  Populated per-run from MAX_REFLECTION_STEPS
     # so tests can override it cheaply without monkey-patching the module.
-    max_reflection_steps: int
+    max_reflection_steps: int | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        """Expose fields through the mapping interface used by existing nodes."""
+        if key not in type(self).model_fields:
+            raise KeyError(key)
+        value = getattr(self, key)
+        if value is None:
+            raise KeyError(key)
+        return value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return a state field or a caller-provided default."""
+        if key not in type(self).model_fields:
+            return default
+        value = getattr(self, key)
+        return default if value is None else value
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in self.model_fields_set
 
 
-async def plan_queries_node(state: ResearchState) -> dict:
+async def plan_queries_node(state: ResearchState) -> ResearchState:
     """Generate search queries from the research question."""
     client: AsyncAnthropic = state["client"]
     queries = await generate_search_queries(state["question"], client)
-    return {**state, "queries": queries}
+    return ResearchState(queries=queries)
 
 
-async def search_node(state: ResearchState) -> dict:
+async def search_node(state: ResearchState) -> ResearchState:
     """Execute web searches for all queries in parallel.
 
     Uses asyncio.gather with return_exceptions=True so that a single
@@ -117,7 +142,7 @@ async def search_node(state: ResearchState) -> dict:
         return_exceptions=True,
     )
 
-    all_results: list[dict] = []
+    all_results: list[dict[str, Any]] = []
     for query, outcome in zip(queries, results_per_query, strict=False):
         if isinstance(outcome, BaseException):
             logger.warning(
@@ -127,10 +152,10 @@ async def search_node(state: ResearchState) -> dict:
             )
             continue
         all_results.extend(outcome)
-    return {**state, "raw_results": all_results}
+    return ResearchState(raw_results=all_results)
 
 
-async def synthesise_node(state: ResearchState) -> dict:
+async def synthesise_node(state: ResearchState) -> ResearchState:
     """Synthesise all findings into a report."""
     client: AsyncAnthropic = state["client"]
     findings_text, safety_flags = build_findings_payload(state["raw_results"])
@@ -138,10 +163,10 @@ async def synthesise_node(state: ResearchState) -> dict:
     report.search_queries = state["queries"]
     if hasattr(report, "safety_flags"):
         report.safety_flags = list(safety_flags)
-    return {**state, "result": report.model_dump()}
+    return ResearchState(result=report.model_dump())
 
 
-def _render_findings_for_critic(raw_results: list[dict]) -> str:
+def _render_findings_for_critic(raw_results: list[dict[str, Any]]) -> str:
     """Render retrieved findings as numbered evidence blocks for the critic.
 
     Kept separate from build_findings_payload because the critic does not
@@ -159,7 +184,7 @@ def _render_findings_for_critic(raw_results: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
-async def reflect_node(state: ResearchState) -> dict:
+async def reflect_node(state: ResearchState) -> ResearchState:
     """Grounded-critic reflection over the synthesis draft.
 
     Extracts claims from the draft, asks the critic (Haiku) whether each
@@ -192,11 +217,10 @@ async def reflect_node(state: ResearchState) -> dict:
     )
 
     new_count = int(state.get("reflection_count", 0)) + 1
-    return {
-        **state,
-        "critique": critique.model_dump(),
-        "reflection_count": new_count,
-    }
+    return ResearchState(
+        critique=critique.model_dump(),
+        reflection_count=new_count,
+    )
 
 
 def _route_after_reflect(state: ResearchState) -> str:
@@ -232,7 +256,7 @@ def _route_after_reflect(state: ResearchState) -> str:
     return END
 
 
-def build_research_graph() -> StateGraph:
+def build_research_graph() -> StateGraph[ResearchState]:
     """Build the research subgraph with a grounded reflection loop.
 
     Flow

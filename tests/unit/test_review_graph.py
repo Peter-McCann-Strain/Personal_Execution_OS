@@ -40,6 +40,31 @@ def test_build_review_graph_compiles():
     assert compiled is not None
 
 
+@pytest.mark.asyncio
+@patch("src.app.agents.graphs.review.generate_weekly_review", new_callable=AsyncMock)
+async def test_compiled_graph_preserves_state_across_partial_updates(mock_weekly):
+    """Later Pydantic updates must not erase review inputs or generated output."""
+    review = MagicMock()
+    review.model_dump.return_value = {
+        "period": "2026-W11",
+        "recommendations": ["Keep shipping"],
+    }
+    mock_weekly.return_value = review
+    client = AsyncMock()
+
+    final = (
+        await build_review_graph()
+        .compile()
+        .ainvoke(ReviewState(review_type="weekly", data="Week data here", client=client))
+    )
+
+    assert final["review_type"] == "weekly"
+    assert final["data"] == "Week data here"
+    assert final["client"] is client
+    assert final["result"]["period"] == "2026-W11"
+    assert final["actions"] == ["Keep shipping"]
+
+
 # ---------------------------------------------------------------------------
 # gather_data_node — passes through state
 # ---------------------------------------------------------------------------
@@ -55,6 +80,7 @@ async def test_gather_data_node_passthrough():
     result = await gather_data_node(state)
     assert result["data"] == "Week data here"
     assert result["review_type"] == "weekly"
+    assert result.model_fields_set == {"data", "review_type"}
 
 
 @pytest.mark.asyncio
@@ -157,6 +183,7 @@ async def test_generate_review_node_weekly(mock_weekly):
     result = await generate_review_node(state)
     assert result["result"]["period"] == "2026-W11"
     assert "Shipped feature X" in result["result"]["accomplishments"]
+    assert result.model_fields_set == {"result"}
     mock_weekly.assert_called_once()
 
 

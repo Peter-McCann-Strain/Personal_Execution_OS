@@ -185,12 +185,25 @@ def _load_socratic_handler():
     if graph_module is None:
         graph_module = ModuleType("src.app.agents.socratic.graph")
 
+        class _TutorialGraphState(dict):
+            """Lightweight test double for the graph's Pydantic boundary model."""
+
+            @classmethod
+            def model_validate(cls, value):
+                return cls(value)
+
+        class _TutorialRuntimeContext:
+            def __init__(self, **values):
+                self.__dict__.update(values)
+
         def _build_dialogue_graph(*_args, **_kwargs):
             raise RuntimeError("build_dialogue_graph stub must be patched in tests")
 
         def _build_preparation_graph(*_args, **_kwargs):
             raise RuntimeError("build_preparation_graph stub must be patched in tests")
 
+        graph_module.TutorialGraphState = _TutorialGraphState
+        graph_module.TutorialRuntimeContext = _TutorialRuntimeContext
         graph_module.build_dialogue_graph = _build_dialogue_graph
         graph_module.build_preparation_graph = _build_preparation_graph
         sys.modules["src.app.agents.socratic.graph"] = graph_module
@@ -400,6 +413,12 @@ class TestStartTutorial:
         assert "caching" in result.content.lower()
         assert result.metadata["phase"] == "dialogue"
         mock_phase.assert_awaited_once()
+        invoked_state = mock_compiled.ainvoke.await_args.args[0]
+        from src.app.agents.socratic.graph import TutorialGraphState
+
+        assert isinstance(invoked_state, TutorialGraphState)
+        assert invoked_state["submitted_work"] == tutorial.submitted_work
+        assert invoked_state["propositions"] == [{"index": 0, "text": "Claim"}]
 
     async def test_not_found(self):
         """start_tutorial with invalid ID → not found."""
@@ -472,6 +491,44 @@ class TestStartTutorial:
         invoked_state = mock_compiled.ainvoke.await_args.args[0]
         assert invoked_state.get("propositions", []) == []
         assert invoked_state.get("claims_unresolved", []) == []
+
+    async def test_malformed_stored_propositions_are_not_loaded_into_graph(self):
+        """Corrupted legacy JSON must not turn mapping keys into tutorial claims."""
+        tutorial = _make_tutorial_mock(
+            phase="ready",
+            propositions={"index": 0, "text": "not-a-list"},
+            preparation=None,
+        )
+        mock_graph = MagicMock()
+        mock_compiled = AsyncMock()
+        mock_compiled.ainvoke.return_value = {
+            "dialogue_history": [{"role": "tutor", "content": "Let's begin."}],
+            "phase": "dialogue",
+        }
+        mock_graph.compile.return_value = mock_compiled
+
+        with (
+            patch(
+                "src.app.domain.services.handlers.socratic.get_tutorial_session",
+                new_callable=AsyncMock,
+                return_value=tutorial,
+            ),
+            patch(
+                "src.app.domain.services.handlers.socratic.build_dialogue_graph",
+                return_value=mock_graph,
+            ),
+            patch(
+                "src.app.domain.services.handlers.socratic.update_tutorial_phase",
+                new_callable=AsyncMock,
+            ),
+        ):
+            from src.app.domain.services.handlers.socratic import start_tutorial
+
+            await start_tutorial(tutorial.id, AsyncMock(), AsyncMock())
+
+        invoked_state = mock_compiled.ainvoke.await_args.args[0]
+        assert invoked_state["propositions"] == []
+        assert invoked_state["claims_unresolved"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -774,6 +831,11 @@ class TestRunPreparation:
 
         mock_graph.compile.assert_called_once_with()
         mock_compiled.ainvoke.assert_awaited_once()
+        invoked_state = mock_compiled.ainvoke.await_args.args[0]
+        from src.app.agents.socratic.graph import TutorialGraphState
+
+        assert isinstance(invoked_state, TutorialGraphState)
+        assert invoked_state["submitted_work"] == "My essay about caching."
         mock_store.assert_awaited_once_with(
             mock_session,
             tutorial_id,

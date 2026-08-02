@@ -244,7 +244,7 @@ async def episode_stats(
             cast(Episode.created_at, DATE).label("date"),
             func.avg(Episode.mood_score).label("mood"),
             func.avg(Episode.energy_rating).label("energy"),
-            func.count().label("count"),
+            func.count().label("entry_count"),
         )
         .where(Episode.created_at >= cutoff, Episode.deleted_at.is_(None))
         .group_by(cast(Episode.created_at, DATE))
@@ -255,7 +255,7 @@ async def episode_stats(
             date=str(row.date),
             mood=round(float(row.mood), 2) if row.mood is not None else None,
             energy=round(float(row.energy), 2) if row.energy is not None else None,
-            count=int(row.count),  # type: ignore[arg-type]
+            count=int(row.entry_count),
         )
         for row in trend_result.all()
     ]
@@ -281,15 +281,14 @@ async def episode_stats(
                 (Episode.para_category.is_(None), "unclassified"),
                 else_=Episode.para_category,
             ).label("category"),
-            func.count().label("count"),
+            func.count().label("entry_count"),
         )
         .where(Episode.created_at >= cutoff, Episode.deleted_at.is_(None))
         .group_by("category")
         .order_by(func.count().desc())
     )
     para_distribution = [
-        ParaCount(category=row.category, count=int(row.count))
-        for row in para_result.all()  # type: ignore[arg-type]
+        ParaCount(category=row.category, count=int(row.entry_count)) for row in para_result.all()
     ]
 
     logger.info("episode_stats", days=days, total=total_entries)

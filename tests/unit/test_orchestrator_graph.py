@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.app.agents.graphs.orchestrator import (
+    AgentState,
     build_orchestrator_graph,
     classify_node,
     communications_node,
@@ -80,7 +81,38 @@ async def test_classify_node(mock_classify_intent: AsyncMock) -> None:
     mock_classify_intent.assert_awaited_once_with("I had a great day", client)
     assert result["intent"] is fake_intent
     assert result["specialist"] == "diary"
-    assert result["message"] == "I had a great day"
+    assert result.model_fields_set == {"intent", "specialist"}
+
+
+@pytest.mark.asyncio
+@patch("src.app.agents.graphs.orchestrator.process_diary_entry", new_callable=AsyncMock)
+@patch("src.app.agents.graphs.orchestrator.classify_intent", new_callable=AsyncMock)
+async def test_compiled_graph_merges_partial_node_updates(
+    mock_classify_intent: AsyncMock,
+    mock_process: AsyncMock,
+) -> None:
+    """Pydantic node updates must not erase fields set at graph entry."""
+    mock_classify_intent.return_value = Intent(
+        intent_type=IntentType.CAPTURE,
+        confidence=0.95,
+        specialist=Specialist.DIARY,
+        reasoning="User wants to journal",
+    )
+    entry = MagicMock()
+    entry.model_dump.return_value = {"content": "Great day"}
+    mock_process.return_value = entry
+    client = MagicMock()
+
+    final = (
+        await build_orchestrator_graph()
+        .compile()
+        .ainvoke(AgentState(message="I had a great day", client=client))
+    )
+
+    assert final["message"] == "I had a great day"
+    assert final["client"] is client
+    assert final["specialist"] == Specialist.DIARY
+    assert final["result"] == {"content": "Great day"}
 
 
 # ---------------------------------------------------------------------------
@@ -399,8 +431,16 @@ async def test_save_stub() -> None:
 def test_route_to_specialist_valid() -> None:
     """route_to_specialist should return the specialist value for valid specialists."""
     for specialist in Specialist:
+        if specialist is Specialist.CONVERSATIONAL:
+            continue
         state = {"specialist": specialist.value}
         assert route_to_specialist(state) == specialist.value
+
+
+def test_route_to_specialist_rejects_service_layer_conversation() -> None:
+    """Conversational turns are handled before this graph and have no graph node."""
+    with pytest.raises(RoutingError, match="Unknown specialist"):
+        route_to_specialist({"specialist": Specialist.CONVERSATIONAL.value})
 
 
 def test_route_to_specialist_missing() -> None:

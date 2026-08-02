@@ -41,7 +41,8 @@ except ImportError:  # pragma: no cover
     MCP_AVAILABLE = False
 
 try:
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
+    from mcp.shared._httpx_utils import create_mcp_http_client
 
     STREAMABLE_HTTP_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -267,16 +268,19 @@ class MCPClientManager:
                     "Authorization": f"Bearer {token}",
                     "MCP-Protocol-Version": "2025-11-25",
                 }
-                transport_ctx = streamablehttp_client(
+                http_client = await stack.enter_async_context(
+                    create_mcp_http_client(headers=headers)
+                )
+                transport_ctx = streamable_http_client(
                     url=str(config.get("url") or resource_uri),
-                    headers=headers,
+                    http_client=http_client,
                 )
                 streams = await stack.enter_async_context(transport_ctx)
-                # streamablehttp_client yields (read, write) on older mcp and
-                # (read, write, get_session_id) on newer ones — accept both.
-                read_stream, write_stream = streams[0], streams[1]
+                read_stream, write_stream = streams
             else:
-                transport = stdio_client(conn.params)  # type: ignore[arg-type]
+                if conn.params is None:
+                    raise MCPError(f"MCP stdio server '{name}' is missing spawn parameters")
+                transport = stdio_client(conn.params)
                 read_stream, write_stream = await stack.enter_async_context(transport)
 
             session = await stack.enter_async_context(_session_context(read_stream, write_stream))
@@ -388,7 +392,7 @@ class MCPClientManager:
                         "server_name": name,
                         "tool_name": public_name,
                         "description": tool.description or "",
-                        "input_schema": tool.inputSchema,
+                        "input_schema": tool.input_schema,
                         "auth_required": runtime_metadata.get("auth_required", False),
                         "roots": runtime_metadata.get("roots", []),
                         "tool_metadata": runtime_metadata.get("metadata", {}),
@@ -462,9 +466,12 @@ class MCPClientManager:
 
         lock = self._locks[server_name]
         async with lock:
+            session = conn.session
+            if session is None:
+                raise MCPError(f"MCP server '{server_name}' has no active session")
             try:
                 result = await asyncio.wait_for(
-                    conn.session.call_tool(tool_name, arguments),  # type: ignore[union-attr]
+                    session.call_tool(tool_name, arguments),
                     timeout=30.0,
                 )
             except _CONNECTION_ERRORS as exc:
@@ -488,9 +495,14 @@ class MCPClientManager:
 
                 # Retry once after successful reconnect
                 conn = self._servers[server_name]
+                session = conn.session
+                if session is None:
+                    raise MCPError(
+                        f"MCP server '{server_name}' reconnected without an active session"
+                    ) from exc
                 try:
                     result = await asyncio.wait_for(
-                        conn.session.call_tool(tool_name, arguments),  # type: ignore[union-attr]
+                        session.call_tool(tool_name, arguments),
                         timeout=30.0,
                     )
                 except Exception as retry_exc:
@@ -517,7 +529,7 @@ class MCPClientManager:
 
         # Convert MCP content blocks to plain dicts
         content_blocks = _serialise_content_blocks(result.content)
-        structured_content = getattr(result, "structuredContent", None)
+        structured_content = result.structured_content
         if not content_blocks and structured_content is not None:
             content_blocks = [
                 {
@@ -530,13 +542,13 @@ class MCPClientManager:
             "mcp_tool_call_complete",
             server=server_name,
             tool=tool_name,
-            is_error=result.isError,
+            is_error=result.is_error,
             content_blocks=len(content_blocks),
         )
 
         return {
             "content": content_blocks,
-            "is_error": result.isError,
+            "is_error": result.is_error,
             "structured_content": structured_content,
         }
 
@@ -566,7 +578,7 @@ class MCPClientManager:
                     {
                         "name": f"{name}__{public_name}",
                         "description": tool.description or "",
-                        "input_schema": tool.inputSchema,
+                        "input_schema": tool.input_schema,
                     }
                 )
         return tools

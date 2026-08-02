@@ -264,6 +264,18 @@ class TestDeleteResolvedWorkflowCheckpoints:
         assert count == 3
         session.execute.assert_awaited_once()
 
+    @pytest.mark.parametrize("rowcount", [None, -1, "3"])
+    async def test_unknown_or_invalid_row_count_is_reported_as_zero(self, rowcount):
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=_ExecuteResult(rowcount=rowcount))
+
+        count = await delete_resolved_workflow_checkpoints(
+            session,
+            before=datetime.now(UTC) - timedelta(days=30),
+        )
+
+        assert count == 0
+
 
 @pytest.mark.asyncio
 class TestRunSessionMaintenance:

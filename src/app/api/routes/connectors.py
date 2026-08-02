@@ -14,7 +14,7 @@ import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,28 +138,13 @@ class ConnectorDocumentDTO(BaseModel):
     updated_at: str
 
 
-class CreateConnectorAccountBody(BaseModel):
-    connector_type: str
-    display_name: str | None = None
-    scopes: list[str] = []
-    auto_use: bool = True
-    background_access: bool = False
-    sync_enabled: bool = False
-    refresh_token: str | None = None
-    oauth_subject: str | None = None
-    oauth_email: str | None = None
-
-
 class UpdateConnectorAccountBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     display_name: str | None = None
-    scopes: list[str] | None = None
     auto_use: bool | None = None
     background_access: bool | None = None
     sync_enabled: bool | None = None
-    status: str | None = None
-    refresh_token: str | None = None
-    oauth_subject: str | None = None
-    oauth_email: str | None = None
 
 
 class SyncConnectorBody(BaseModel):
@@ -576,8 +561,9 @@ async def google_oauth_callback(
         )
 
     if error or not code:
+        failure_code = "provider_denied" if error else "missing_code"
         oauth_state.status = "failed"
-        oauth_state.error_message = error or "Missing authorization code"
+        oauth_state.error_message = failure_code
         await _record_audit_event(
             session,
             account_id=oauth_state.account_id,
@@ -588,7 +574,7 @@ async def google_oauth_callback(
             metadata={
                 "connector_type": oauth_state.connector_type,
                 "user_ref": oauth_state.user_id,
-                "reason": oauth_state.error_message,
+                "reason": failure_code,
             },
         )
         await session.commit()
@@ -596,7 +582,7 @@ async def google_oauth_callback(
             _frontend_oauth_redirect(
                 connector_type=oauth_state.connector_type,
                 status="error",
-                error=oauth_state.error_message,
+                error=failure_code,
             )
         )
 
@@ -633,7 +619,7 @@ async def google_oauth_callback(
         await session.commit()
     except Exception as exc:
         oauth_state.status = "failed"
-        oauth_state.error_message = str(exc)
+        oauth_state.error_message = "oauth_exchange_failed"
         await _record_audit_event(
             session,
             account_id=oauth_state.account_id,
@@ -645,6 +631,7 @@ async def google_oauth_callback(
                 "connector_type": oauth_state.connector_type,
                 "user_ref": oauth_state.user_id,
                 "reason": "oauth_exchange_failed",
+                "error_type": type(exc).__name__,
             },
         )
         await session.commit()
@@ -675,50 +662,6 @@ async def list_connector_accounts(
     return [_account_to_dto(account) for account in accounts]
 
 
-@router.post("/connectors/accounts", response_model=ConnectorAccountDTO, status_code=201)
-async def create_connector_account(
-    body: CreateConnectorAccountBody,
-    principal: Principal = Depends(get_current_principal),
-    session: AsyncSession = Depends(get_db),
-) -> ConnectorAccountDTO:
-    """Create a persisted connector account shell."""
-    user_id = _principal_user_ref(principal)
-    encrypted_refresh_token, token_last_rotated_at = _encrypted_refresh_token(body.refresh_token)
-    account = await repo_create_connector_account(
-        session,
-        user_id=user_id,
-        connector_type=body.connector_type,
-        display_name=body.display_name or connector_default_display_name(body.connector_type),
-        scopes=body.scopes,
-        auto_use=body.auto_use,
-        background_access=body.background_access,
-        sync_enabled=body.sync_enabled,
-        encrypted_refresh_token=encrypted_refresh_token,
-        token_last_rotated_at=token_last_rotated_at,
-        metadata=_connector_metadata(
-            oauth_subject=body.oauth_subject,
-            oauth_email=body.oauth_email,
-        ),
-    )
-    await _record_audit_event(
-        session,
-        account_id=principal.account_id,
-        user_id=principal.user_id,
-        event_type="connector.account_created",
-        resource_id=str(account.id),
-        metadata={
-            "connector_type": body.connector_type,
-            "sync_enabled": body.sync_enabled,
-            "background_access": body.background_access,
-            "auto_use": body.auto_use,
-            "has_refresh_token": bool(body.refresh_token),
-            "scopes": body.scopes,
-        },
-    )
-    await session.commit()
-    return _account_to_dto(account)
-
-
 @router.patch("/connectors/accounts/{account_id}", response_model=ConnectorAccountDTO)
 async def update_connector_account(
     account_id: uuid.UUID,
@@ -726,33 +669,16 @@ async def update_connector_account(
     principal: Principal = Depends(get_current_principal),
     session: AsyncSession = Depends(get_db),
 ) -> ConnectorAccountDTO:
-    """Update connector permissions and status."""
+    """Update operator-controlled connector preferences."""
     user_id = _principal_user_ref(principal)
-    encrypted_refresh_token, token_last_rotated_at = _encrypted_refresh_token(body.refresh_token)
-    metadata = None
-    if body.oauth_subject or body.oauth_email:
-        existing = await repo_get_connector_account(session, account_id=account_id, user_id=user_id)
-        if existing is None:
-            raise NotFoundError(f"Connector account not found: {account_id}")
-        metadata = _connector_metadata(
-            base=existing.metadata_,
-            oauth_subject=body.oauth_subject,
-            oauth_email=body.oauth_email,
-        )
-
     account = await repo_update_connector_account(
         session,
         account_id=account_id,
         user_id=user_id,
         display_name=body.display_name,
-        scopes=body.scopes,
         auto_use=body.auto_use,
         background_access=body.background_access,
         sync_enabled=body.sync_enabled,
-        status=body.status,
-        encrypted_refresh_token=encrypted_refresh_token,
-        token_last_rotated_at=token_last_rotated_at,
-        metadata=metadata,
     )
     if account is None:
         raise NotFoundError(f"Connector account not found: {account_id}")
@@ -767,11 +693,7 @@ async def update_connector_account(
         resource_id=str(account.id),
         metadata={
             "connector_type": account.connector_type,
-            "changed_fields": sorted(
-                str(field) for field in fields_set if str(field) != "refresh_token"
-            ),
-            "token_rotated": bool(body.refresh_token),
-            "status": body.status,
+            "changed_fields": sorted(str(field) for field in fields_set),
             "sync_enabled": body.sync_enabled,
             "background_access": body.background_access,
         },
@@ -893,11 +815,12 @@ async def sync_connector(
         )
         await session.commit()
     except Exception as exc:
+        safe_error = "Connector sync failed"
         await repo_update_connector_sync_job(
             session,
             job_id=job.id,
             status="failed",
-            error_message=str(exc),
+            error_message=safe_error,
         )
         await repo_update_connector_account(
             session,
@@ -915,7 +838,7 @@ async def sync_connector(
                 "connector_type": account.connector_type,
                 "sync_type": body.sync_type,
                 "job_id": str(job.id),
-                "error": str(exc),
+                "error_type": type(exc).__name__,
             },
         )
         await session.commit()

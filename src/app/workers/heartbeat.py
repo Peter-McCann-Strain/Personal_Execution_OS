@@ -4,6 +4,7 @@ Checks stale goals, upcoming deadlines, overdue commitments, relationship decay.
 """
 
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 import structlog
@@ -17,6 +18,62 @@ from src.app.workers.agent_tasks import get_fatigue_manager
 logger = structlog.get_logger()
 
 
+def _required_uuid(value: object, field: str) -> uuid.UUID:
+    """Decode a UUID returned by a raw SQL query."""
+    if isinstance(value, uuid.UUID):
+        return value
+    if isinstance(value, str):
+        try:
+            return uuid.UUID(value)
+        except ValueError as exc:
+            raise ValueError(f"{field} must contain a valid UUID") from exc
+    raise TypeError(f"{field} must be a UUID, got {type(value).__name__}")
+
+
+def _required_positive_int(value: object, field: str) -> int:
+    """Decode a positive integer without accepting booleans as integers."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{field} must be an integer, got {type(value).__name__}")
+    if value <= 0:
+        raise ValueError(f"{field} must be greater than zero")
+    return value
+
+
+def _required_datetime(value: object, field: str) -> datetime:
+    """Decode an aware datetime returned by a timezone-aware database column."""
+    if not isinstance(value, datetime):
+        raise TypeError(f"{field} must be a datetime, got {type(value).__name__}")
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field} must be timezone-aware")
+    return value
+
+
+def _required_str(value: object, field: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string, got {type(value).__name__}")
+    return value
+
+
+def _optional_str(value: object, field: str) -> str | None:
+    if value is None:
+        return None
+    return _required_str(value, field)
+
+
+def _optional_str_list(value: object, field: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise TypeError(f"{field} must be a list of strings or None")
+
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise TypeError(f"{field}[{index}] must be a string")
+        normalized.append(item)
+    return normalized
+
+
 async def run_heartbeat(ctx: dict) -> None:
     """Main heartbeat — runs all periodic checks."""
     logger.info("heartbeat_started")
@@ -28,7 +85,7 @@ async def run_heartbeat(ctx: dict) -> None:
 
     settings = ctx.get("settings")
     async with session_factory() as session:
-        checks: list[tuple[str, object]] = [
+        checks: list[tuple[str, Callable[[AsyncSession], Awaitable[None]]]] = [
             ("stale_goals", check_stale_goals),
             ("upcoming_deadlines", check_upcoming_deadlines),
             ("overdue_commitments", check_overdue_commitments),
@@ -194,20 +251,26 @@ async def check_relationship_decay(session: AsyncSession) -> None:
     fatigue = get_fatigue_manager()
 
     for contact in decayed_contacts:
-        first = contact["first_name"]
-        last = contact["last_name"] or ""
+        contact_id = _required_uuid(contact["id"], "contact.id")
+        first = _required_str(contact["first_name"], "contact.first_name")
+        last = _optional_str(contact["last_name"], "contact.last_name") or ""
         full_name = f"{first} {last}".strip()
-        freq = contact["interaction_frequency_days"]
-        last_at = contact["last_interaction_at"]
+        freq = _required_positive_int(
+            contact["interaction_frequency_days"],
+            "contact.interaction_frequency_days",
+        )
+        last_at = _required_datetime(contact["last_interaction_at"], "contact.last_interaction_at")
+        how_we_met = _optional_str(contact.get("how_we_met"), "contact.how_we_met")
+        tags = _optional_str_list(contact.get("tags"), "contact.tags")
 
         now = datetime.now(tz=UTC)
-        days_since = (now - last_at).days if last_at else 0
-        days_overdue = days_since - freq if freq else 0
+        days_since = (now - last_at).days
+        days_overdue = days_since - freq
 
         # Fetch recent interaction context for richer nudges
         interaction_ctx = await _get_interaction_context(
             session,
-            contact["id"],
+            contact_id,
         )
 
         message = await _generate_nudge(
@@ -215,8 +278,8 @@ async def check_relationship_decay(session: AsyncSession) -> None:
             days_since=days_since,
             days_overdue=days_overdue,
             frequency=freq,
-            how_we_met=contact.get("how_we_met"),
-            tags=contact.get("tags"),
+            how_we_met=how_we_met,
+            tags=tags,
             interaction_context=interaction_ctx,
         )
 
@@ -230,7 +293,7 @@ async def check_relationship_decay(session: AsyncSession) -> None:
 
         logger.info(
             "relationship_decay_detected",
-            contact_id=str(contact["id"]),
+            contact_id=str(contact_id),
             days_since=days_since,
             days_overdue=days_overdue,
             frequency=freq,
@@ -264,7 +327,8 @@ async def _get_interaction_context(
     for r in rows:
         date_str = str(r["interaction_at"])[:10] if r["interaction_at"] else "?"
         summary = r["summary"] or "no summary"
-        topics = ", ".join(r["topics"]) if r.get("topics") else ""
+        topic_values = _optional_str_list(r.get("topics"), "interaction.topics")
+        topics = ", ".join(topic_values) if topic_values else ""
         suffix = f" [{topics}]" if topics else ""
         lines.append(f"  {date_str}: {summary}{suffix}")
     return "\n".join(lines)

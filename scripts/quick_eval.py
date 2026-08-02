@@ -1,8 +1,7 @@
 """CLI tool for exporting sample interactions for A/B testing prompt changes.
 
-Exports a random sample of recent interactions with their scores. Claude Code
-reads these samples, judges whether a new prompt would produce better responses,
-and makes a keep/revert decision.
+Exports a random sample of recent interactions with their scores for a human
+reviewer to compare against a proposed prompt change.
 
 Usage:
     # Export 20 random diary samples for A/B comparison
@@ -85,7 +84,7 @@ async def _export_samples(args: argparse.Namespace) -> None:
         f"Samples: {len(records)}",
         f"Period: last {args.days} days",
         "",
-        "## Instructions for Claude Code",
+        "## Reviewer instructions",
         "",
         "For each sample below:",
         "1. Read the user message",

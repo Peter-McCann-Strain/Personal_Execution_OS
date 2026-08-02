@@ -109,7 +109,9 @@ async def execute_tool_calls(
     for plan, result in zip(plans, results, strict=True):
         tool_use_id = plan.tool_id
 
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
+            if not isinstance(result, Exception):
+                raise result
             logger.error(
                 "mcp_tool_execution_error",
                 tool_use_id=tool_use_id,

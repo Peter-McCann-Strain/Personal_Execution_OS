@@ -5,12 +5,11 @@ from __future__ import annotations
 import asyncio
 import time
 from functools import lru_cache
-from typing import TypedDict
 
 import structlog
 from anthropic import AsyncAnthropic
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.config import Settings, get_settings
@@ -84,23 +83,25 @@ class LiveWorkflowOutcome(BaseModel):
     response: ChatResponse | None = None
 
 
-class LiveWorkflowState(TypedDict, total=False):
+class LiveWorkflowState(BaseModel):
     """Minimal graph state for supported live specialist execution."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     message: MessageInput
-    client: AsyncAnthropic
-    session: AsyncSession
+    client: SkipValidation[AsyncAnthropic]
+    session: SkipValidation[AsyncSession]
     intent: Intent
     trace_recorder: TraceRecorder
-    parent_span_id: str | None
-    allowed_specialists: list[str]
-    specialist: str
-    response: ChatResponse
-    skip_reason: str
+    parent_span_id: str | None = None
+    allowed_specialists: list[str] = Field(default_factory=list)
+    specialist: str = ""
+    response: ChatResponse | None = None
+    skip_reason: str = ""
     # Correlation ID propagated end-to-end — mirrors the middleware-bound
     # structlog contextvar so every LLM call, tool span, and enqueued ARQ
     # job from this turn carries the same ID.
-    request_id: str
+    request_id: str = ""
 
 
 def _handler_for_specialist(specialist: str):
@@ -119,29 +120,26 @@ def _handler_for_specialist(specialist: str):
     }[specialist]
 
 
-async def _dispatch_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _dispatch_node(state: LiveWorkflowState) -> dict[str, object]:
     """Lift the already-classified specialist into graph state."""
-    specialist = str(state["intent"].specialist)
-    recorder = state["trace_recorder"]
+    specialist = str(state.intent.specialist)
+    recorder = state.trace_recorder
     with recorder.timed_span(
         name="workflow.live.dispatch",
         span_kind=TraceSpanKind.ROUTING,
-        parent_span_id=state.get("parent_span_id"),
+        parent_span_id=state.parent_span_id,
         specialist=specialist,
     ) as span:
         span["details"] = {
             "specialist": specialist,
-            "allowed_specialists": list(state.get("allowed_specialists", [])),
+            "allowed_specialists": list(state.allowed_specialists),
         }
-    return {
-        **state,
-        "specialist": specialist,
-    }
+    return {"specialist": specialist}
 
 
 def _route_to_specialist(state: LiveWorkflowState) -> str:
-    specialist = str(state.get("specialist") or "").strip()
-    allowed = {value.strip() for value in state.get("allowed_specialists", []) if value.strip()}
+    specialist = state.specialist.strip()
+    allowed = {value.strip() for value in state.allowed_specialists if value.strip()}
     if not specialist:
         return "unsupported"
     if allowed and specialist not in allowed:
@@ -151,11 +149,11 @@ def _route_to_specialist(state: LiveWorkflowState) -> str:
     return specialist
 
 
-async def _unsupported_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _unsupported_node(state: LiveWorkflowState) -> dict[str, object]:
     """Return a skip reason when the live runtime should not execute this specialist."""
-    recorder = state["trace_recorder"]
-    specialist = str(state.get("specialist") or "")
-    allowed = set(state.get("allowed_specialists", []))
+    recorder = state.trace_recorder
+    specialist = state.specialist
+    allowed = set(state.allowed_specialists)
     if specialist and specialist not in _SUPPORTED_SPECIALISTS:
         reason = f"workflow_runtime_not_supported_for_{specialist}"
     elif specialist and specialist not in allowed:
@@ -166,7 +164,7 @@ async def _unsupported_node(state: LiveWorkflowState) -> LiveWorkflowState:
     with recorder.timed_span(
         name="workflow.live.unsupported",
         span_kind=TraceSpanKind.SPECIALIST,
-        parent_span_id=state.get("parent_span_id"),
+        parent_span_id=state.parent_span_id,
         specialist=specialist or None,
     ) as span:
         span["status"] = TraceSpanStatus.DEGRADED
@@ -175,32 +173,29 @@ async def _unsupported_node(state: LiveWorkflowState) -> LiveWorkflowState:
             "skip_reason": reason,
         }
 
-    return {
-        **state,
-        "skip_reason": reason,
-    }
+    return {"skip_reason": reason}
 
 
 async def _execute_specialist(
     state: LiveWorkflowState,
     *,
     specialist: str,
-) -> LiveWorkflowState:
+) -> dict[str, object]:
     """Run one supported specialist handler inside the graph."""
-    recorder = state["trace_recorder"]
+    recorder = state.trace_recorder
     handler = _handler_for_specialist(specialist)
 
     with recorder.timed_span(
         name=f"workflow.live.execute.{specialist}",
         span_kind=TraceSpanKind.SPECIALIST,
-        parent_span_id=state.get("parent_span_id"),
+        parent_span_id=state.parent_span_id,
         specialist=specialist,
     ) as span:
         response = await handler(
-            state["message"],
-            state["client"],
-            state["session"],
-            state["intent"],
+            state.message,
+            state.client,
+            state.session,
+            state.intent,
         )
         span["model"] = response.metadata.get("model")
         span["tokens_in"] = response.metadata.get("input_tokens")
@@ -210,53 +205,50 @@ async def _execute_specialist(
             "response_preview": _preview_response(response),
         }
 
-    return {
-        **state,
-        "response": response,
-    }
+    return {"response": response}
 
 
-async def _diary_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _diary_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.DIARY.value)
 
 
-async def _memory_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _memory_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.MEMORY.value)
 
 
-async def _review_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _review_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.REVIEW.value)
 
 
-async def _project_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _project_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.PROJECT.value)
 
 
-async def _communications_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _communications_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.COMMUNICATIONS.value)
 
 
-async def _notification_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _notification_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.NOTIFICATION.value)
 
 
-async def _plan_day_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _plan_day_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.PLAN_DAY.value)
 
 
-async def _research_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _research_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.RESEARCH.value)
 
 
-async def _tools_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _tools_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.TOOLS.value)
 
 
-async def _save_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _save_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.SAVE.value)
 
 
-async def _socratic_node(state: LiveWorkflowState) -> LiveWorkflowState:
+async def _socratic_node(state: LiveWorkflowState) -> dict[str, object]:
     return await _execute_specialist(state, specialist=Specialist.SOCRATIC.value)
 
 

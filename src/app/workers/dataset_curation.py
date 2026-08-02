@@ -233,7 +233,10 @@ def _cluster(vectors: Sequence[Sequence[float]], *, min_size: int) -> list[int]:
 
     km = KMeans(n_clusters=k, n_init=10, random_state=42)
     km.fit(list(vectors))
-    return [int(label) for label in km.labels_]
+    labels = km.labels_
+    if labels is None:
+        raise RuntimeError("KMeans completed without assigning cluster labels")
+    return [int(label) for label in labels]
 
 
 def _fallback_kmeans(
@@ -400,15 +403,13 @@ def _pick_by_score_spread(
 
 def _final_score(record: InteractionRecord) -> float | None:
     """Mean of the four auto-judge dimensions, or None if not yet scored."""
-    dims = (
-        record.score_relevance,
-        record.score_actionability,
-        record.score_tone,
-        record.score_conciseness,
-    )
-    if any(d is None for d in dims):
+    relevance = record.score_relevance
+    actionability = record.score_actionability
+    tone = record.score_tone
+    conciseness = record.score_conciseness
+    if relevance is None or actionability is None or tone is None or conciseness is None:
         return None
-    return sum(dims) / 4  # type: ignore[arg-type]
+    return (relevance + actionability + tone + conciseness) / 4
 
 
 def _score_band(score: float | None) -> str:

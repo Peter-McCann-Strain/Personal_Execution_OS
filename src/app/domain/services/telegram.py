@@ -1,7 +1,4 @@
-"""Telegram bot service — message handling, formatting, security.
-
-Includes inline keyboard support for interactive reviews and chart sending.
-"""
+"""Telegram bot service: message handling, formatting, and security."""
 
 import asyncio
 import uuid
@@ -12,7 +9,6 @@ from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
-    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -21,7 +17,6 @@ from aiogram.types import (
 from anthropic import AsyncAnthropic
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.app.core.async_utils import mapping_rows
 from src.app.core.exceptions import (
     AppError,
     DatabaseError,
@@ -142,7 +137,6 @@ class TelegramService:
         self.dp.message.register(self._handle_start, CommandStart())
         self.dp.message.register(self._handle_plan_day, Command("planday"))
         self.dp.message.register(self._handle_review_cmd, Command("review"))
-        self.dp.message.register(self._handle_charts, Command("charts"))
         self.dp.callback_query.register(
             self._handle_mood_callback,
             F.data.startswith(_CB_MOOD),
@@ -314,94 +308,6 @@ class TelegramService:
             "How would you rate this week overall?",
             reply_markup=_build_rating_keyboard("mood"),
         )
-
-    async def _handle_charts(self, message: types.Message) -> None:
-        """Handle /charts command — send mood/energy, habit, and goal charts."""
-        if not self._check_auth(message):
-            return
-
-        await message.answer("Generating charts...")
-        sent_any = False
-
-        async with self.session_factory() as session:
-            # Mood/energy chart (last 30 days)
-            try:
-                from sqlalchemy import text
-
-                from src.app.core.charts import mood_energy_chart
-
-                result = await session.execute(
-                    text("""
-                        SELECT created_at, mood_score, energy_rating
-                        FROM episodes
-                        WHERE mood_score IS NOT NULL
-                           OR energy_rating IS NOT NULL
-                        ORDER BY created_at DESC LIMIT 60
-                    """)
-                )
-                episodes = [dict(r) for r in await mapping_rows(result)]
-                if episodes:
-                    episodes.reverse()
-                    png = mood_energy_chart(episodes)
-                    if png:
-                        await self._send_chart(message, png, "mood_energy.png")
-                        sent_any = True
-            except Exception:
-                logger.warning("charts_mood_energy_failed", exc_info=True)
-
-            # Habit streaks chart
-            try:
-                from src.app.core.charts import habit_streak_chart
-
-                result = await session.execute(
-                    text("""
-                        SELECT name, current_streak, longest_streak
-                        FROM habits WHERE active = true
-                        ORDER BY current_streak DESC
-                    """)
-                )
-                habits = [dict(r) for r in await mapping_rows(result)]
-                if habits:
-                    png = habit_streak_chart(habits)
-                    if png:
-                        await self._send_chart(message, png, "habit_streaks.png")
-                        sent_any = True
-            except Exception:
-                logger.warning("charts_habit_streaks_failed", exc_info=True)
-
-            # Goal progress chart
-            try:
-                from src.app.core.charts import goal_progress_chart
-
-                result = await session.execute(
-                    text("""
-                        SELECT title, progress, status
-                        FROM goals
-                        WHERE status NOT IN ('completed', 'cancelled')
-                        ORDER BY priority ASC
-                    """)
-                )
-                goals = [dict(r) for r in await mapping_rows(result)]
-                if goals:
-                    png = goal_progress_chart(goals)
-                    if png:
-                        await self._send_chart(message, png, "goal_progress.png")
-                        sent_any = True
-            except Exception:
-                logger.warning("charts_goal_progress_failed", exc_info=True)
-
-        if not sent_any:
-            await message.answer("No chart data available yet.")
-
-    async def _send_chart(
-        self,
-        message: types.Message,
-        png_bytes: bytes,
-        filename: str,
-    ) -> None:
-        """Send a PNG chart image to the user."""
-        photo = BufferedInputFile(png_bytes, filename=filename)
-        await message.answer_photo(photo)
 
     async def _maybe_send_chat_action(self, chat_id: int) -> None:
         """Send a typing indicator only if work takes long enough to be noticeable."""

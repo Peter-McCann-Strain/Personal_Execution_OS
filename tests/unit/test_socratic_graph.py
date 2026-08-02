@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 
 from src.app.agents.socratic.state import (
     AgentResponse,
@@ -84,7 +85,7 @@ class TestGraphConstruction:
         assert graph is not None
 
     def test_dialogue_graph_has_all_nodes(self):
-        from src.app.agents.socratic.graph import build_dialogue_graph
+        from src.app.agents.socratic.graph import TutorialGraphState, build_dialogue_graph
 
         graph = build_dialogue_graph()
         expected = {
@@ -100,12 +101,49 @@ class TestGraphConstruction:
             "final_user_response_node",
         }
         assert expected.issubset(set(graph.nodes.keys()))
+        assert "assessor_suggestion" in TutorialGraphState.model_fields
 
     def test_tutorial_graph_builds(self):
         from src.app.agents.socratic.graph import build_tutorial_graph
 
         graph = build_tutorial_graph()
         assert graph is not None
+
+    async def test_dialogue_checkpoint_excludes_runtime_dependencies(self):
+        """A non-serializable client belongs in runtime context, not durable state."""
+        from src.app.agents.socratic.graph import (
+            TutorialGraphState,
+            TutorialRuntimeContext,
+            build_dialogue_graph,
+        )
+
+        state = TutorialGraphState(
+            session_id="checkpoint-regression",
+            user_id="u1",
+            topic="Caching",
+            submitted_work="Caching reduces latency.",
+            phase=TutorialPhase.READY,
+        )
+        response = AgentResponse(content="What trade-off does caching create?", agent="tutor")
+
+        with patch(
+            "src.app.agents.socratic.graph.tutor_opening",
+            new_callable=AsyncMock,
+            return_value=response,
+        ):
+            result = (
+                await build_dialogue_graph()
+                .compile(checkpointer=InMemorySaver())
+                .ainvoke(
+                    state,
+                    config={"configurable": {"thread_id": "checkpoint-regression"}},
+                    context=TutorialRuntimeContext(client=AsyncMock()),
+                )
+            )
+
+        assert result["dialogue_history"][-1]["content"] == response.content
+        assert result["__interrupt__"]
+        assert "client" not in TutorialGraphState.model_fields
 
 
 class TestPreparationNodes:
@@ -545,7 +583,7 @@ class TestAssessorGateNode:
 
         assert result.goto == "tutor_turn_node"
         assert result.update["no_intervention_count"] == 0
-        assert "re-engage" in result.update["_assessor_suggestion"]
+        assert "re-engage" in result.update["assessor_suggestion"]
 
 
 class TestAgentTurnNodes:

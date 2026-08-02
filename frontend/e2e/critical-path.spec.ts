@@ -1,15 +1,34 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { installCriticalPathMocks } from "./helpers/critical-path-mocks";
 
 test.beforeEach(async ({ page }) => {
   await installCriticalPathMocks(page);
 });
 
+async function openPrimaryNavigation(page: Page) {
+  const mobileMenu = page.getByRole("button", { name: "Open navigation menu" });
+  if (await mobileMenu.isVisible()) {
+    await mobileMenu.click();
+  }
+}
+
+async function navigateFromPrimaryNavigation(page: Page, label: string) {
+  await openPrimaryNavigation(page);
+  const destination = page.getByRole("button", { name: label, exact: true });
+  await expect(destination).toBeVisible();
+  await destination.click();
+}
+
 test("app shell exposes the primary navigation and routes cleanly", async ({ page }) => {
   await page.goto("/dashboard");
 
   await expect(page).toHaveTitle("Dashboard — Execution OS");
-  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
+  const desktopSidebarToggle = page.getByRole("button", { name: "Toggle sidebar" });
+  const mobileMenu = page.getByRole("button", { name: "Open navigation menu" });
+  await expect(desktopSidebarToggle.or(mobileMenu)).toBeVisible();
+
+  await openPrimaryNavigation(page);
   await expect(page.getByRole("button", { name: "Chat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Monitoring" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
@@ -18,7 +37,7 @@ test("app shell exposes the primary navigation and routes cleanly", async ({ pag
   await expect(page).toHaveURL(/\/chat$/);
   await expect(page.getByText("How can I help?")).toBeVisible();
 
-  await page.getByRole("button", { name: "Monitoring" }).click();
+  await navigateFromPrimaryNavigation(page, "Monitoring");
   await expect(page).toHaveURL(/\/monitoring$/);
   await expect(page.getByRole("heading", { name: "System Monitoring" })).toBeVisible();
 });
@@ -50,7 +69,7 @@ test("dashboard and monitoring readiness surfaces load without backend services"
   await expect(page.getByText("Recent Diary")).toBeVisible();
   await expect(page.getByText("Agent Activity")).toBeVisible();
 
-  await page.getByRole("button", { name: "Monitoring" }).click();
+  await navigateFromPrimaryNavigation(page, "Monitoring");
   await expect(page).toHaveURL(/\/monitoring$/);
 
   await page.getByRole("tab", { name: "Readiness" }).click();

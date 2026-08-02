@@ -1,3 +1,5 @@
+# Pull request
+
 ## Outcome
 
 Describe the user or operator outcome this change completes.
@@ -20,8 +22,11 @@ List the checks run and attach only synthetic or redacted evidence.
 - [ ] Tests cover the behavior and failure path.
 - [ ] Configuration, schema, migrations, operations, and user documentation are
       updated where relevant.
+- [ ] API, configuration, observability, privacy, and architecture contracts
+      are updated where relevant.
 - [ ] Accessibility and responsive behavior were checked for UI changes.
-- [ ] `python3 scripts/public_release_audit.py --root .` reports zero findings.
+- [ ] Documentation links, Markdown lint, and Mermaid rendering pass.
+- [ ] The tracked-tree audit in `CONTRIBUTING.md` reports zero findings.
 - [ ] The relevant commands in `CONTRIBUTING.md` pass.
 
 ## Release notes

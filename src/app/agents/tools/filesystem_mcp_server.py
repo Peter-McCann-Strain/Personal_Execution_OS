@@ -4,9 +4,9 @@ import argparse
 from fnmatch import fnmatch
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
-mcp = FastMCP("Filesystem")
+mcp = MCPServer("Filesystem")
 _ROOT: Path | None = None
 
 

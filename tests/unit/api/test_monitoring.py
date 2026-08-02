@@ -821,6 +821,21 @@ async def test_quality_scores_rounds_and_handles_null_values():
     mock_repo.assert_awaited_once()
 
 
+async def test_result_adapters_reject_non_callable_and_non_iterable_shapes() -> None:
+    from src.app.api.routes.monitoring import _result_rows, _result_scalar_values
+
+    assert await _result_scalar_values(object()) == []
+    assert await _result_rows(SimpleNamespace(all="not-callable")) == []
+
+    scalar_result = MagicMock()
+    scalar_result.scalars.return_value.all.return_value = 42
+    assert await _result_scalar_values(scalar_result) == []
+
+    row_result = MagicMock()
+    row_result.all.return_value = None
+    assert await _result_rows(row_result) == []
+
+
 # ---------------------------------------------------------------------------
 # _period_to_cutoff — today and unknown-period branches
 # ---------------------------------------------------------------------------

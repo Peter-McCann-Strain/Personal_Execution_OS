@@ -6,8 +6,11 @@ using the SM-2 algorithm so the user is reminded of important insights.
 
 from __future__ import annotations
 
+import inspect
 import uuid
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 from anthropic import AsyncAnthropic
@@ -16,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.agents.specialists.review import generate_weekly_review
 from src.app.core.analytics import average_metric
-from src.app.core.async_utils import maybe_await
 from src.app.core.exceptions import DatabaseError
 from src.app.domain.models import ChatResponse, Intent, MessageInput
 from src.app.domain.services.handlers._common import enqueue_entity_extraction
@@ -25,11 +27,30 @@ from src.app.second_brain.spaced_repetition import calculate_next_review
 logger = structlog.get_logger()
 
 
-async def _mapping_rows(result: object) -> list[dict]:
-    """Read SQLAlchemy mapping rows while tolerating AsyncMock-based test doubles."""
-    mappings = await maybe_await(result.mappings())
-    rows = await maybe_await(mappings.all())
-    return list(rows)
+async def _mapping_rows(result: object) -> list[Mapping[str, Any]]:
+    """Read SQLAlchemy rows, including async test doubles, into string-keyed mappings."""
+    mappings_method = getattr(result, "mappings", None)
+    if not callable(mappings_method):
+        raise TypeError("SQL result does not provide mappings().")
+    mappings_result = mappings_method()
+    if inspect.isawaitable(mappings_result):
+        mappings_result = await mappings_result
+
+    all_method = getattr(mappings_result, "all", None)
+    if not callable(all_method):
+        raise TypeError("SQL mapping result does not provide all().")
+    raw_rows = all_method()
+    if inspect.isawaitable(raw_rows):
+        raw_rows = await raw_rows
+    if not isinstance(raw_rows, Iterable):
+        raise TypeError("SQL mapping result all() did not return an iterable.")
+
+    rows: list[Mapping[str, Any]] = []
+    for row in raw_rows:
+        if not isinstance(row, Mapping):
+            raise TypeError("SQL mapping result contained a non-mapping row.")
+        rows.append({str(key): value for key, value in row.items()})
+    return rows
 
 
 async def handle_review(

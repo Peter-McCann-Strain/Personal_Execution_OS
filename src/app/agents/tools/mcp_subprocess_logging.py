@@ -17,8 +17,15 @@ def configure_mcp_subprocess_logging() -> None:
     setup_logging("WARNING", "production")
 
     root_logger = logging.getLogger()
-    for handler in root_logger.handlers:
+    for handler in list(root_logger.handlers):
         if isinstance(handler, logging.StreamHandler):
-            handler.setStream(sys.stderr)
+            replacement = logging.StreamHandler(sys.stderr)
+            replacement.setLevel(handler.level)
+            replacement.setFormatter(handler.formatter)
+            for log_filter in handler.filters:
+                replacement.addFilter(log_filter)
+            root_logger.removeHandler(handler)
+            handler.close()
+            root_logger.addHandler(replacement)
 
     logging.getLogger("httpx").setLevel(logging.WARNING)

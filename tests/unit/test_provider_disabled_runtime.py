@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.app.core.llm import DisabledLLMProvider
-from src.app.workers.agent_tasks import process_agent_task
+from src.app.workers.agent_tasks import (
+    _run_commitment_extraction,
+    _run_entity_extraction,
+    process_agent_task,
+)
 from src.app.workers.scheduled_actions_runtime import run_due_scheduled_actions
 
 
@@ -45,3 +49,24 @@ async def test_scheduled_actions_skip_before_database_access_when_disabled() -> 
     result = await run_due_scheduled_actions({"llm_provider": DisabledLLMProvider()})
 
     assert result == {"executed": 0, "failures": 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "handler",
+    [_run_entity_extraction, _run_commitment_extraction],
+)
+async def test_extraction_handlers_reject_missing_model_client(handler) -> None:
+    """Direct worker dispatch must not pass a missing client into model code."""
+    result = await handler(
+        {
+            "settings": object(),
+            "session_factory": object(),
+        },
+        {"episode_id": "episode-1", "text": "I will call Alice tomorrow."},
+    )
+
+    assert result == {
+        "status": "error",
+        "message": "no model client in context",
+    }

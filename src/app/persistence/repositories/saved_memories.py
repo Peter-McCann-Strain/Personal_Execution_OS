@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import maybe_await
 from src.app.persistence.models import SavedMemory, not_deleted
 
 
@@ -96,10 +97,14 @@ async def list_saved_memories(
         stmt = stmt.where(SavedMemory.state == state)
 
     count_result = await session.execute(select(func.count()).select_from(stmt.subquery()))
-    total_value = count_result.scalar_one()
-    if inspect.isawaitable(total_value):
-        total_value = await total_value
-    total = int(total_value)
+    total_value = await maybe_await(count_result.scalar_one())
+    if isinstance(total_value, bool) or not isinstance(total_value, int):
+        msg = "saved-memory count query returned a non-integer value"
+        raise TypeError(msg)
+    if total_value < 0:
+        msg = "saved-memory count query returned a negative value"
+        raise ValueError(msg)
+    total = total_value
 
     result = await session.execute(
         stmt.order_by(
@@ -110,12 +115,8 @@ async def list_saved_memories(
         .offset(offset)
         .limit(limit)
     )
-    scalars = result.scalars()
-    if inspect.isawaitable(scalars):
-        scalars = await scalars
-    rows = scalars.all()
-    if inspect.isawaitable(rows):
-        rows = await rows
+    scalars = await maybe_await(result.scalars())
+    rows = await maybe_await(scalars.all())
     return list(rows), total
 
 

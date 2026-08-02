@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,19 @@ from src.app.persistence.repositories.web_push_subscriptions import (
 )
 
 logger = structlog.get_logger()
+
+
+@runtime_checkable
+class _WebPushSender(Protocol):
+    def __call__(
+        self,
+        *,
+        subscription_info: dict[str, object],
+        data: str,
+        vapid_private_key: str,
+        vapid_claims: dict[str, str],
+        ttl: int,
+    ) -> object: ...
 
 
 @dataclass(slots=True)
@@ -42,12 +55,15 @@ def web_push_public_key() -> str:
     return get_settings().web_push_public_key.strip()
 
 
-def _load_webpush() -> tuple[object | None, type[Exception] | None]:
+def _load_webpush() -> tuple[_WebPushSender | None, type[Exception] | None]:
     try:
         from pywebpush import WebPushException, webpush
     except Exception:
         return None, None
-    return webpush, WebPushException
+    sender: object = webpush
+    if not isinstance(sender, _WebPushSender):
+        return None, None
+    return sender, WebPushException
 
 
 def _should_revoke_subscription(exc: Exception) -> bool:
@@ -112,7 +128,7 @@ async def dispatch_web_push_to_user(
         return summary
 
     webpush, webpush_exc = _load_webpush()
-    if webpush is None:
+    if not isinstance(webpush, _WebPushSender):
         logger.warning("web_push_library_unavailable")
         summary.skipped += len(subscriptions)
         return summary

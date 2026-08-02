@@ -1,8 +1,7 @@
 """CLI tool for exporting low-scoring interactions grouped by failure pattern.
 
-Exports interactions that scored below a threshold on any dimension, grouped by
-the lowest-scoring dimension. Designed for Claude Code to analyse and identify
-improvement opportunities.
+Exports interactions that scored below a threshold on any dimension, grouped
+by the lowest-scoring dimension for human review.
 
 Usage:
     # Export diary failures from the last 7 days

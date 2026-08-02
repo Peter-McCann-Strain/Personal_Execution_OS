@@ -6,33 +6,45 @@ features need an optional local service, some send data to an external
 provider, and some automated systems remain off until the operator enables
 them.
 
-This document records those boundaries. "Available" means the feature has an
-implemented user or operator path in this release. It does not mean the project
-has completed an independent security review or broad user testing.
+The labels below describe what can be used in this release. "Available" means
+there is a working user or operator path. It does not mean that the project has
+passed an independent security review or been tested by a broad user base.
 
 ## Maturity labels
 
-| Label                  | Meaning                                                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Local core             | Available in the default Compose installation without an external account                                      |
-| Optional local         | Requires another service chosen by the operator; data stays local only when that service is local              |
-| Optional provider      | Requires a third-party account or delivery network; relevant data leaves the host                              |
-| Operator opt-in        | Implemented but disabled by default because it can spend money, remove data, or export operational information |
-| Dormant or unsupported | Code may exist for compatibility or development, but there is no supported public-release workflow             |
+- **Local core:** available in the default Compose installation without an
+  external account.
+- **Optional provider:** requires a third-party account or delivery network;
+  relevant data leaves the host.
+- **Operator opt-in:** implemented but disabled initially because it can spend
+  money, remove data, or export operational information.
+- **Dormant or unsupported:** code may exist for compatibility or development,
+  but there is no supported public-release workflow.
 
 ## Default local workspace
 
-| Capability                       | Maturity   | What works                                                                                                                                                                                                                | Data flow                                                                                                                                                    |
-| -------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Owner login and browser sessions | Local core | One local owner can create a password, sign in, change the password, and revoke sessions                                                                                                                                  | Browser to the local web proxy and API; credentials and session records are stored in PostgreSQL                                                             |
-| Planning records                 | Local core | Goals, projects, habits, and decisions have local creation and management screens. Reviews can assemble local records without a model. Task and commitment records are also available through their API and capture paths | Browser to API to PostgreSQL                                                                                                                                 |
-| Knowledge records                | Local core | Notes and explicit saved memories can be created, searched, edited, and deleted. Diary and contact views display records produced by their capture paths                                                                  | Browser to API to PostgreSQL                                                                                                                                 |
-| Today and Workbench views        | Local core | Existing local records are assembled into daily and cross-workspace views                                                                                                                                                 | API reads local PostgreSQL records; optional calendar and mail panels remain unavailable until connected                                                     |
-| Structured retrieval             | Local core | Local records can be filtered and searched without vector embeddings                                                                                                                                                      | Browser to API to PostgreSQL                                                                                                                                 |
-| Background worker                | Local core | The worker runs beside the API for queued and scheduled jobs                                                                                                                                                              | API and worker exchange queue state through Redis and store durable results in PostgreSQL                                                                    |
-| Core data export                 | Local core | The Data section in Settings exports the documented core record set                                                                                                                                                       | API creates a download for the signed-in browser; the downloaded file becomes a separate private copy                                                        |
-| Database backup and restore      | Local core | Operator scripts create a checked PostgreSQL archive and can perform an explicit destructive restore                                                                                                                      | PostgreSQL to an operator-chosen file on the host; `.env`, local identity, Redis, and `app-data` need separate backup coverage                               |
-| Installable PWA shell            | Local core | Supported browsers can install the responsive web interface                                                                                                                                                               | Static application assets can be cached on the device; API responses, personal records, authentication state, and navigations are not cached for offline use |
+- **Owner access:** one owner can initialize a password, sign in, change the
+  password, and revoke browser sessions. Credentials and session records live
+  in PostgreSQL.
+- **Planning records:** goals, projects, habits, and decisions have local
+  screens. Reviews can assemble local records without a model. Task and
+  commitment records are available through their API and capture paths.
+- **Knowledge records:** notes and explicit saved memories can be created,
+  searched, edited, and deleted. Diary and contact views show records produced
+  by their capture paths.
+- **Daily views:** Today and Workbench assemble existing PostgreSQL records;
+  calendar and mail panels remain unavailable until connected.
+- **Structured retrieval:** local records can be filtered and searched without
+  vector embeddings.
+- **Background work:** the worker exchanges queue state through Redis and
+  stores durable results in PostgreSQL.
+- **Export and recovery:** Settings exports the documented core record set;
+  operator scripts create and restore a checked PostgreSQL archive plus a
+  versioned local-state archive for private configuration and `app-data`.
+  Redis remains a separate transient-state recovery decision.
+- **Installable PWA shell:** versioned static assets can be cached on the
+  device. API responses, personal records, authentication state, and
+  navigations are not cached for offline use.
 
 The default stack binds to the host's loopback address. Desktop browsers on
 that host can use the local PWA path. A phone needs an HTTPS address that can
@@ -40,33 +52,33 @@ reach the host, plus the remote-access safeguards in [SETUP.md](SETUP.md).
 There is no native iOS or Android application, and personal records are not
 available offline.
 
-## Optional local capability
-
-| Capability                               | Maturity       | Enablement                                                                        | Data flow                                                                                                                                                     |
-| ---------------------------------------- | -------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vector embeddings and semantic retrieval | Optional local | Run Ollama separately, pull the configured embedding model, and set `OLLAMA_HOST` | Selected text is sent to the configured Ollama endpoint. It stays on the operator's systems only when that endpoint is local and under the operator's control |
-
-PostgreSQL `pgvector` stores embeddings after they are created. Leaving
-`OLLAMA_HOST` blank disables embedding calls; structured storage and retrieval
-continue to work.
-
 ## Optional external providers
 
-Every provider in this table starts off. Enabling one accepts that provider's
-terms, retention rules, account controls, and availability. Read
+Every provider below starts off. Enabling one accepts that provider's terms,
+retention rules, account controls, and availability. Read
 [INTEGRATIONS.md](INTEGRATIONS.md) before adding a credential.
 
-| Capability                                                                                                                      | Provider                         | What leaves the host                                                                                          | Local copy or result                                                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Model-backed chat, diary capture, classification, analysis, commitment extraction, project decomposition, and draft suggestions | Anthropic                        | Prompts, selected workspace context, and model parameters                                                     | Responses and related runtime records can be stored in PostgreSQL                                              |
-| Read-only Calendar, Gmail, and Drive sync                                                                                       | Google Workspace                 | OAuth credentials and read-only Google API requests                                                           | Selected event, message, file metadata, and supported file content can be copied into PostgreSQL or `app-data` |
-| Message capture and notification delivery                                                                                       | Telegram                         | Messages, attachments, chat metadata, bot requests, and delivery requests                                     | Captured content and processing records can be stored locally                                                  |
-| Web research                                                                                                                    | Tavily                           | Search queries and request options                                                                            | Search results can be stored locally or included in a later model request                                      |
-| Browser notifications                                                                                                           | Browser vendor push service      | Push subscription details and a generic encrypted notification payload                                        | Subscription state is stored in PostgreSQL and on the browser device                                           |
-| Error reporting                                                                                                                 | Sentry                           | Errors and the diagnostic context allowed by the operator's settings                                          | Provider retention depends on the Sentry project                                                               |
-| Product telemetry                                                                                                               | PostHog                          | Pseudonymous events and configured properties                                                                 | Provider retention depends on the PostHog project                                                              |
-| Traces and metrics                                                                                                              | OpenTelemetry destination        | Routes, timings, identifiers, and configured attributes; content export has a separate off-by-default control | Retention depends on the operator's chosen collector and backend                                               |
-| Uptime heartbeat                                                                                                                | Healthchecks-compatible endpoint | A request indicating that a configured job or service reached its checkpoint                                  | Retention depends on the endpoint operator                                                                     |
+- **Anthropic:** prompts, selected context, and model parameters can leave the
+  host. Responses and runtime evidence may be stored in PostgreSQL.
+- **Google Workspace:** OAuth credentials and read-only requests leave the
+  host. Selected Calendar, Gmail, and Drive data is copied into PostgreSQL.
+- **Telegram:** messages, attachments, metadata, and delivery requests cross
+  the bot network. Captured content and processing records may be stored
+  locally.
+- **Tavily:** search queries and options leave the host. Results may be stored
+  locally or included in a later model request.
+- **Browser push:** subscription details and a generic encrypted payload cross
+  a browser-vendor push service. Subscription state is stored locally and on
+  the device.
+- **Sentry:** errors and allowed diagnostic context are retained according to
+  the operator's Sentry project.
+- **PostHog:** configured events use the literal identifier `anonymous` by
+  default; an advanced installation salt makes it pseudonymous.
+- **OpenTelemetry:** route, timing, identifier, and configured span attributes
+  can be sent to an operator-chosen trace collector. Content export has a
+  separate off-by-default control.
+- **Healthchecks-compatible endpoint:** a request states that the worker
+  reached its checkpoint; retention belongs to that endpoint.
 
 Disconnecting or revoking a provider stops future access but does not by itself
 erase local copies, provider-retained data, browser storage, logs, exports, or
@@ -74,21 +86,28 @@ backups. [PRIVACY.md](PRIVACY.md) explains the deletion boundaries.
 
 ## Disabled-by-default operator systems
 
-These systems are implemented but deliberately remain off in the example
-configuration.
+These systems are implemented but remain off in the example configuration.
 
-| Control                                                        | Default | Why it is off                                                                                               |
-| -------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
-| `PROACTIVE_AUTOMATION_ENABLED`                                 | `false` | Can schedule model-backed work and incur provider cost                                                      |
-| `SESSION_MAINTENANCE_ENABLED`                                  | `false` | Can compact or remove runtime transcripts, artifacts, and checkpoints under the configured retention policy |
-| `AUTO_JUDGE_ENABLED`                                           | `false` | Sends or processes additional evaluation work and can increase model use                                    |
-| Evaluation pipeline, export, spot checks, and dataset curation | `false` | Can generate extra records, files, provider calls, and review work                                          |
-| Cost, quality, schema, dead-letter, and SLO alert delivery     | `false` | Requires an operator-approved destination and handling policy                                               |
-| GitHub issue filing                                            | `false` | Creates an external side effect and requires a dedicated token and repository                               |
+- `PROACTIVE_AUTOMATION_ENABLED=false`: model schedules can incur provider
+  cost.
+- `SESSION_MAINTENANCE_ENABLED=false`: maintenance compacts or removes old
+  runtime evidence under the documented retention policy.
+- `AUTO_JUDGE_ENABLED=false`: judging adds model evaluation work.
+- Evaluation pipeline, export, spot checks, and dataset curation are off
+  because they can add files, provider calls, and review work.
+- Cost, quality, schema, dead-letter, and SLO alert delivery is off until an
+  operator approves the destination and handling policy.
+- `GITHUB_ISSUE_FILER_ENABLED=false`: issue maintenance is an external write
+  requiring a dedicated token and repository.
 
-Do not enable these controls as a bundle. Turn on one system at a time, inspect
-its scheduled work and output, and test restoration first when retention or
-deletion is involved.
+Enable one system at a time and inspect its scheduled work and output. If it
+can retain, compact, or delete data, test restoration before switching it on.
+
+Enabling an alert destination, notification channel, Web Push, or GitHub issue
+filer gives that specific automation standing permission to deliver its
+documented event. It will not ask for confirmation each time. Dormant ad-hoc
+tool execution follows a different rule: every proposed mutation needs its own
+approval.
 
 ## Dormant or unsupported in this release
 
@@ -100,6 +119,9 @@ deletion is involved.
   send mail or modify provider records through those connectors.
 - There is no native mobile binary, background native service, or offline
   personal-record store.
+- Query-time Ollama, embedding columns, and `pgvector` search code exist, but
+  the public release has no supported workflow that populates record
+  embeddings on a fresh installation.
 - Model output is not authority to publish, purchase, delete, or perform another
   consequential external action.
 

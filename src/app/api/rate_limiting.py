@@ -5,6 +5,7 @@ Tests, and local/dev Redis outages, fall back to the in-process counter.
 """
 
 import hashlib
+import inspect
 import threading
 import time
 from collections import defaultdict
@@ -101,16 +102,24 @@ return 1
         now = time.time()
         ttl_seconds = max(1, int(window_seconds) + 1)
         member = f"{now}:{time.monotonic_ns()}"
-        result = await client.eval(
+        result_or_awaitable = client.eval(
             self._LUA_SCRIPT,
             1,
             f"rate_limit:{key}",
-            now,
-            window_seconds,
-            limit,
+            str(now),
+            str(window_seconds),
+            str(limit),
             member,
-            ttl_seconds,
+            str(ttl_seconds),
         )
+        result = (
+            await result_or_awaitable
+            if inspect.isawaitable(result_or_awaitable)
+            else result_or_awaitable
+        )
+        if not isinstance(result, str | bytes | int):
+            msg = f"Unexpected Redis rate-limit result: {type(result).__name__}"
+            raise TypeError(msg)
         return bool(int(result))
 
 

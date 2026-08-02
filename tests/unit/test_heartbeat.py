@@ -1,5 +1,6 @@
 """Tests for heartbeat daemon — including relationship decay, deadlines, overdue, healthcheck."""
 
+import uuid
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -143,7 +144,7 @@ class TestCheckRelationshipDecay:
         now = datetime.now(tz=UTC)
         decayed = [
             {
-                "id": "uuid-1",
+                "id": uuid.uuid4(),
                 "first_name": "Alice",
                 "last_name": "Smith",
                 "interaction_frequency_days": 14,
@@ -153,7 +154,7 @@ class TestCheckRelationshipDecay:
                 "tags": None,
             },
             {
-                "id": "uuid-2",
+                "id": uuid.uuid4(),
                 "first_name": "Bob",
                 "last_name": None,
                 "interaction_frequency_days": 7,
@@ -188,7 +189,7 @@ class TestCheckRelationshipDecay:
         now = datetime.now(tz=UTC)
         decayed = [
             {
-                "id": "uuid-1",
+                "id": str(uuid.uuid4()),
                 "first_name": "Charlie",
                 "last_name": "Brown",
                 "interaction_frequency_days": 30,
@@ -226,7 +227,7 @@ class TestCheckRelationshipDecay:
         now = datetime.now(tz=UTC)
         decayed = [
             {
-                "id": "uuid-1",
+                "id": uuid.uuid4(),
                 "first_name": "Cher",
                 "last_name": None,
                 "interaction_frequency_days": 7,
@@ -255,6 +256,30 @@ class TestCheckRelationshipDecay:
         assert "Cher" in pending[0].message
         assert "  " not in pending[0].message
 
+    async def test_rejects_malformed_contact_data_before_calling_model(self):
+        now = datetime.now(tz=UTC)
+        decayed = [
+            {
+                "id": uuid.uuid4(),
+                "first_name": "Alice",
+                "last_name": None,
+                "interaction_frequency_days": 7,
+                "last_interaction_at": now - timedelta(days=14),
+                "how_we_met": None,
+                "tags": ["friend", 42],
+            }
+        ]
+        session = _mock_session_multi([decayed])
+        generate_nudge = AsyncMock()
+
+        with (
+            patch("src.app.workers.heartbeat._generate_nudge", generate_nudge),
+            pytest.raises(TypeError, match=r"contact\.tags\[1\] must be a string"),
+        ):
+            await check_relationship_decay(session)
+
+        generate_nudge.assert_not_awaited()
+
 
 # ---------------------------------------------------------------------------
 # check_stale_goals (sanity check existing behaviour)
@@ -265,7 +290,7 @@ class TestCheckStaleGoals:
     async def test_logs_stale_goals(self):
         stale = [
             {
-                "id": "uuid-1",
+                "id": uuid.uuid4(),
                 "title": "Learn Rust",
                 "status": "active",
                 "progress": 0.3,
@@ -558,7 +583,7 @@ class TestGetInteractionContext:
     async def test_returns_empty_string_when_no_interactions(self):
         """No interaction rows should return empty string."""
         session = _mock_session(query_results=[])
-        result = await _get_interaction_context(session, "contact-uuid")
+        result = await _get_interaction_context(session, uuid.uuid4())
         assert result == ""
 
     async def test_formats_interaction_rows(self):
@@ -576,7 +601,7 @@ class TestGetInteractionContext:
             },
         ]
         session = _mock_session(query_results=interactions)
-        result = await _get_interaction_context(session, "contact-uuid")
+        result = await _get_interaction_context(session, uuid.uuid4())
 
         assert "Discussed AI project" in result
         assert "AI, LLMs" in result
@@ -594,7 +619,7 @@ class TestGetInteractionContext:
             },
         ]
         session = _mock_session(query_results=interactions)
-        result = await _get_interaction_context(session, "contact-uuid")
+        result = await _get_interaction_context(session, uuid.uuid4())
 
         assert "no summary" in result
 
@@ -608,7 +633,7 @@ class TestGetInteractionContext:
             },
         ]
         session = _mock_session(query_results=interactions)
-        result = await _get_interaction_context(session, "contact-uuid")
+        result = await _get_interaction_context(session, uuid.uuid4())
 
         assert "?" in result
         assert "Quick chat" in result
@@ -623,11 +648,25 @@ class TestGetInteractionContext:
             },
         ]
         session = _mock_session(query_results=interactions)
-        result = await _get_interaction_context(session, "contact-uuid")
+        result = await _get_interaction_context(session, uuid.uuid4())
 
         assert "Chat" in result
         # No brackets because topics is empty
         assert "[" not in result
+
+    async def test_rejects_non_string_interaction_topics(self):
+        session = _mock_session(
+            query_results=[
+                {
+                    "summary": "Chat",
+                    "topics": ["planning", 7],
+                    "interaction_at": datetime(2026, 3, 8, tzinfo=UTC),
+                }
+            ]
+        )
+
+        with pytest.raises(TypeError, match=r"interaction\.topics\[1\] must be a string"):
+            await _get_interaction_context(session, uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------
@@ -943,7 +982,7 @@ class TestCheckRelationshipDecayWithContext:
         now = datetime.now(tz=UTC)
         decayed = [
             {
-                "id": "uuid-1",
+                "id": uuid.uuid4(),
                 "first_name": "Dave",
                 "last_name": "Wilson",
                 "interaction_frequency_days": 14,

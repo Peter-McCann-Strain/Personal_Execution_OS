@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -169,6 +170,19 @@ class TestExecuteToolCalls:
         assert len(results) == 1
         assert results[0]["is_error"] is True
         assert "boom" in results[0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_parallel_execution_propagates_cancellation(self):
+        """Task cancellation must never be converted into a successful result object."""
+        manager = _make_manager()
+        manager.call_tool.side_effect = asyncio.CancelledError()
+        blocks = [
+            {"id": "toolu_1", "name": "server__tool", "input": {}},
+            {"id": "toolu_2", "name": "server__tool", "input": {}},
+        ]
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_tool_calls(manager, blocks)
 
     @pytest.mark.asyncio
     async def test_missing_id_defaults_to_unknown(self):

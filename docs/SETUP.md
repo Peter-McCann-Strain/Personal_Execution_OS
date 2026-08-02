@@ -8,16 +8,17 @@ networks they need.
 ## Requirements
 
 - A current Docker Engine
-- Docker Compose v2
+- Docker Compose 2.24.0 or later
 - macOS or Linux with a POSIX shell; on Windows, use a current WSL 2
   distribution with Docker integration
 - At least 4 GB of free memory
 - At least 10 GB of free disk space, plus room for your data and backups
 
-The release workflow currently verifies the Compose stack on Ubuntu in CI and
-macOS during release preparation. Other Linux distributions, processor
-architectures, Docker alternatives, and Windows configurations may work but
-are not yet part of the tested host matrix.
+CI verifies the Compose stack on Ubuntu. The project has also run its automated
+checks on macOS, but it does not yet keep a published host-by-host clean-install
+and upgrade record. Other Linux distributions, processor architectures, Docker
+alternatives, and Windows configurations may work but are not part of the
+tested host matrix.
 
 Confirm Docker is running:
 
@@ -44,10 +45,10 @@ The script:
 5. Starts PostgreSQL, Redis, migrations, the API, worker, and web service.
 6. Waits for the health checks to pass.
 
-PostgreSQL objects are owned by a non-superuser migration role. The API and
-worker connect as a separate non-owner role, so account row-level-security
-policies apply to normal application queries. The bootstrap superuser is used
-only by the database container's initialization and recovery tools.
+PostgreSQL objects belong to a non-superuser migration role. The API and worker
+connect through a separate non-owner role, so account row-level-security
+policies apply to application queries. Only database initialization and
+recovery tools use the bootstrap superuser.
 
 It never prints the generated secrets. Back up `.env` separately from the
 database because encrypted connector tokens cannot be recovered without
@@ -86,18 +87,23 @@ configured retention periods and test backup restoration before opting in.
 Quality/SLO alert delivery and evaluation export are also disabled until their
 destinations and exported-data handling have been reviewed.
 
-## Optional local embeddings
+## Advanced embedding compatibility
 
-Vector search can use an Ollama instance running on the Docker host. Install
-Ollama separately, pull the model named by `OLLAMA_EMBED_MODEL`, then set:
+The source includes query-time Ollama and `pgvector` compatibility. The
+advanced dataset-curation job also uses Ollama. The public release has no
+supported indexing path that populates record embeddings, so this setting does
+not enable general semantic record retrieval by itself.
+
+To exercise the compatible code or dataset curation, install Ollama
+separately, pull the model named by `OLLAMA_EMBED_MODEL`, then set:
 
 ```dotenv
 OLLAMA_HOST=http://host.docker.internal:11434
 ```
 
 Restart the stack after changing `.env`. Leave `OLLAMA_HOST` blank to keep
-embedding calls disabled. Structured capture and ordinary database retrieval
-remain available.
+embedding calls disabled. Structured capture and database retrieval still
+work.
 
 ## Install the PWA
 
@@ -118,7 +124,8 @@ specific iOS or Android version you intend to use.
 
 ## Enable an integration
 
-All external integrations start disabled. Before adding a credential:
+All credentialed provider integrations start disabled. Before adding a
+credential:
 
 1. Read [INTEGRATIONS.md](INTEGRATIONS.md).
 2. Create a dedicated provider credential with the least privilege available.
@@ -172,33 +179,52 @@ After pulling a reviewed update:
 ```
 
 The migration container runs before the API and worker. Take a backup before
-every upgrade and review release notes for migration or configuration changes.
+every upgrade and review the release notes for migration or configuration
+changes.
+
+The public preview does not yet have version-specific upgrade notes or a
+supported downgrade command. Keep the exact source revision used to create
+each backup. If an upgrade migration cannot be reversed, recovery may require
+restoring both that prior revision and the database dump taken before the
+upgrade.
 
 ## Back up
 
 Create a PostgreSQL archive:
 
 ```sh
+docker compose stop web api worker
 ./scripts/backup-database.sh
 ```
 
-The command parses the archive, restores every archive stream into a temporary
-database, removes that database, and writes a SHA-256 sidecar. Keep the dump and
-its `.sha256` file together.
+Stopping application writers first keeps new acknowledged application writes
+out of the interval between the database and local-state artifacts. The backup
+command parses the archive, restores every archive stream into a temporary
+database, removes that database, and writes a SHA-256 sidecar. Keep the dump
+and its `.sha256` file together.
 
-This is a database backup, not a complete machine backup. Also back up:
+This is a database backup, not a complete recovery set. After creating it, stop
+the stack without deleting volumes and create the complementary versioned
+local-state archive:
 
-- `.env`
-- `config/IDENTITY.local.md`
-- any files stored in the `app-data` Docker volume
+```sh
+docker compose down
+./scripts/backup-local-state.sh
+```
+
+The local-state archive includes `.env`, `config/IDENTITY.local.md`, and the
+`app-data` volume. It has an internal integrity manifest and a required
+archive-bound SHA-256 sidecar. It excludes PostgreSQL and Redis. Follow the
+exact sequencing, format, restore, and drill guidance in
+[Backup and recovery](BACKUP_AND_RECOVERY.md).
 
 Encrypt backups and keep at least one tested copy on another device. A backup
 is not complete until a restore has succeeded in an isolated installation.
 
-Restore is intentionally explicit because it replaces the live local database.
-The restore script stops writers before creating a verified safety backup. It
-attempts to roll back automatically if archive restoration, migration, or
-service startup fails:
+Restoring a backup replaces the live local database, so the command requires a
+confirmation flag. The script stops writers and creates a verified safety
+backup first. If the archive restore, migration, or service startup fails, it
+tries to roll back automatically:
 
 ```sh
 ./scripts/restore-database.sh \
@@ -208,37 +234,88 @@ service startup fails:
 
 Test this procedure with disposable data before relying on it.
 
-Redis queues are intentionally not restored by this database command. Stop the
-stack before a disaster-recovery restore and inspect or clear stale queued jobs
-before enabling automation. A fully coherent machine backup must cover the
-PostgreSQL dump, `.env`, local identity, `app-data`, Redis state when needed,
-and the host configuration under one tested retention policy.
+The database command does not restore Redis queues. Neither does the
+local-state helper: Redis is transient coordination state and replaying an old
+queue can repeat stale work. Keep the stack stopped until that state and any
+external provider effects have been reviewed.
 
-## Remove local data
+## Retire an installation and remove private data
 
-The following command permanently deletes this installation's PostgreSQL,
-Redis, and application-data volumes:
+Stopping containers preserves the installation. Retirement removes it. Use
+the following order when you want to end billing and access, remove private
+data, and prepare the source tree for public sharing:
+
+1. While the app still runs, disconnect each provider and cancel any paid
+   provider, hosting, domain, monitoring, backup, or network service in its own
+   console. If in-app revocation fails, revoke the token provider-side before
+   continuing.
+2. Export anything you intend to keep, then verify the chosen encrypted backup.
+   If nothing should survive, identify every dump and external backup for later
+   deletion instead.
+3. Stop queued and scheduled work, then permanently delete this installation's
+   PostgreSQL, Redis, and application-data volumes:
+
+   ```sh
+   docker compose down --volumes
+   ```
+
+4. Inspect the two ignored private files from the repository root. Once their
+   exact paths and contents are confirmed as disposable, delete them:
+
+   ```sh
+   ls -l .env config/IDENTITY.local.md
+   rm -- .env config/IDENTITY.local.md
+   ```
+
+5. Delete operator-chosen database dumps and sidecars, exported datasets,
+   logs, screenshots, browser traces, and copied `app-data` artifacts from
+   their exact known locations. Do not use a broad recursive deletion command.
+6. Use **Clear this device** in Settings before shutdown where possible, then
+   clear site data/service workers for every browser profile and device that
+   used the app.
+7. Apply the retention/deletion controls of each provider and backup service;
+   local token revocation cannot erase provider-retained data.
+8. Verify that no containers remain, no provider credential still works, no
+   heartbeat or alert arrives, and every intended subscription or bill is
+   closed.
+9. Before publishing the source tree, run the history and working-tree checks
+   in [Security](../SECURITY.md#secret-handling). Review every reported
+   location; never publish first and plan to clean the history later.
+
+Deleting Docker volumes does not delete `.env`, local identity, browser data,
+backups, provider data, or third-party accounts. Removing the source directory
+alone is therefore not a complete retirement.
+
+## Prepare a public source build
+
+Distributors can show a source link on the public landing page by setting
+`VITE_SOURCE_REPOSITORY_URL` to the repository's HTTPS URL in `.env` before
+building. The value is public and becomes part of the web bundle. Leave it
+blank for a private fork.
+
+Before publishing, use the latest tagged source revision, complete the
+retirement checks above, and run:
 
 ```sh
-docker compose down --volumes
+python3 scripts/public_release_audit.py --root . --git-metadata
+gitleaks dir . --redact=100
+gitleaks git . --redact=100 --log-opts=--all
 ```
-
-Disconnect provider accounts first. Provider revocation, provider-retained
-data, browser storage, logs, exports, screenshots, and backups have separate
-deletion steps. Use **Clear this device** in Settings on each browser.
 
 ## Remote access
 
-The default port is intentionally bound to localhost. Keep that boundary unless
-you understand the exposure.
+The default port is bound to localhost. Leave it there unless you understand
+and can manage the added exposure.
 
 For remote use:
 
 1. Complete first-run owner setup and confirm login locally. The one-time setup
-   endpoint is intentionally unauthenticated, so never expose an uninitialized
-   instance that another person could claim.
+   endpoint has no authentication, so never expose an uninitialized instance
+   that another person could claim.
 2. Keep the Compose port bound to `127.0.0.1`.
 3. Put a maintained TLS reverse proxy or private access network in front of it.
+   The outer TLS terminator owns HSTS policy. Enable `includeSubDomains` or
+   browser preload only when every affected subdomain is permanently HTTPS.
 4. Set `PUBLIC_HOSTNAME` to the exact DNS hostname or IPv4 address sent by that
    proxy, without a scheme, port, path, or wildcard. Configured IPv6 literals
    are not supported; local `[::1]` remains allowed automatically. Requests
@@ -246,13 +323,13 @@ For remote use:
 5. Set `AUTH_COOKIE_SECURE=true`.
 6. Set `AUTH_TRUSTED_ORIGINS` to the exact HTTPS origin.
 7. Apply host firewall rules and rate limits.
-8. Test login, logout, CSRF rejection, WebSocket or streaming behavior, and
+8. Test login, logout, CSRF rejection, server-sent-event streaming, and
    backup restoration before importing real data.
 
-An installable PWA served to another device requires a secure browser context,
-normally HTTPS. A private network alone does not remove that browser
-requirement. This project intentionally does not prescribe one reverse proxy,
-VPN, certificate authority, or DNS provider; the operator owns that boundary.
+An installable PWA served to another device needs a secure browser context,
+normally HTTPS. A private network does not remove that browser requirement.
+Choose and maintain the reverse proxy or private network, certificate
+authority, and DNS setup that fit your environment.
 
 Do not publish the PostgreSQL, Redis, API, or worker ports. This repository does
 not include a hardened multi-user or public-cloud deployment.
@@ -262,10 +339,53 @@ not include a hardened multi-user or public-cloud deployment.
 Development requires Python 3.12, `uv`, PostgreSQL 16 with `pgvector`, Redis 7,
 and Node.js 22 LTS at 22.22 or newer, or Node.js 24 and newer.
 
+The native path is for a disposable development database. It uses the simple
+`assistant` owner from `.env.example`, not the three-role Compose security
+model, so it is not evidence that runtime RLS or network isolation works.
+
+Create local configuration:
+
+```sh
+cp -n .env.example .env
+cp -n config/IDENTITY.example.md config/IDENTITY.local.md
+chmod 600 .env config/IDENTITY.local.md
+```
+
+For a new local PostgreSQL installation, run the equivalent of these commands
+as a local database administrator. The password is the development-only value
+already present in `.env.example`. Never use it for a remote or real-data
+database.
+
+```sh
+createuser --login assistant
+psql postgres -c "ALTER ROLE assistant PASSWORD 'assistant_dev'"
+createdb --owner=assistant personal_execution_os
+psql personal_execution_os -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
+psql personal_execution_os -c 'CREATE EXTENSION IF NOT EXISTS vector'
+psql personal_execution_os -c 'CREATE EXTENSION IF NOT EXISTS ltree'
+psql personal_execution_os -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm'
+```
+
+If the role or database already exists, inspect it before running any creation
+command again. Start the local PostgreSQL and Redis services with the platform
+service manager, then confirm:
+
+```sh
+psql "postgresql://assistant:assistant_dev@localhost:5432/personal_execution_os" -c 'SELECT 1'
+redis-cli -u redis://localhost:6379/0 ping
+```
+
+Shells do not automatically export values from `.env`. Either use an
+environment loader or export the required values before invoking direct
+commands. `uv` itself does not turn `.env` into shell variables for `psql` or
+`redis-cli`.
+
+Install dependencies, migrate, and start the API on the port expected by Vite:
+
 ```sh
 uv sync --frozen --extra dev
 uv run alembic upgrade head
-uv run uvicorn src.app.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn src.app.main:app --host 127.0.0.1 --port 8001
 ```
 
 Run the worker in another terminal:
@@ -281,6 +401,23 @@ cd frontend
 npm ci
 npm run dev
 ```
+
+The frontend listens on `http://localhost:3000` and proxies `/api` to
+`http://localhost:8001`. Streaming uses server-sent events; there is no
+supported WebSocket endpoint.
+
+To remove only the disposable native database after development, stop the
+native API and worker, then run these commands as the same local database
+administrator used for creation:
+
+```sh
+dropdb --if-exists personal_execution_os
+dropuser --if-exists assistant
+```
+
+This does not remove `.env`, local identity, Redis keys, browser data, or
+operator-created exports. Use the full retirement checklist above when those
+must also be removed.
 
 ## Validate a source checkout
 

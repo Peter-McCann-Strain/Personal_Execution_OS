@@ -2460,86 +2460,6 @@
         "title": "CreateCommitmentBody",
         "type": "object"
       },
-      "CreateConnectorAccountBody": {
-        "properties": {
-          "auto_use": {
-            "default": true,
-            "title": "Auto Use",
-            "type": "boolean"
-          },
-          "background_access": {
-            "default": false,
-            "title": "Background Access",
-            "type": "boolean"
-          },
-          "connector_type": {
-            "title": "Connector Type",
-            "type": "string"
-          },
-          "display_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
-          },
-          "oauth_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Oauth Email"
-          },
-          "oauth_subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Oauth Subject"
-          },
-          "refresh_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Refresh Token"
-          },
-          "scopes": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Scopes",
-            "type": "array"
-          },
-          "sync_enabled": {
-            "default": false,
-            "title": "Sync Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "connector_type"
-        ],
-        "title": "CreateConnectorAccountBody",
-        "type": "object"
-      },
       "CreateContactBody": {
         "properties": {
           "email": {
@@ -8940,6 +8860,7 @@
         "type": "object"
       },
       "UpdateConnectorAccountBody": {
+        "additionalProperties": false,
         "properties": {
           "auto_use": {
             "anyOf": [
@@ -8973,64 +8894,6 @@
               }
             ],
             "title": "Display Name"
-          },
-          "oauth_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Oauth Email"
-          },
-          "oauth_subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Oauth Subject"
-          },
-          "refresh_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Refresh Token"
-          },
-          "scopes": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scopes"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
           },
           "sync_enabled": {
             "anyOf": [
@@ -10807,7 +10670,7 @@
   },
   "info": {
     "title": "Personal Execution OS",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -12003,54 +11866,6 @@
         "tags": [
           "connectors"
         ]
-      },
-      "post": {
-        "description": "Create a persisted connector account shell.",
-        "operationId": "create_connector_account_api_connectors_accounts_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateConnectorAccountBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectorAccountDTO"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "APIKeyHeader": []
-          },
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Create Connector Account",
-        "tags": [
-          "connectors"
-        ]
       }
     },
     "/api/connectors/accounts/{account_id}": {
@@ -12098,7 +11913,7 @@
         ]
       },
       "patch": {
-        "description": "Update connector permissions and status.",
+        "description": "Update operator-controlled connector preferences.",
         "operationId": "update_connector_account_api_connectors_accounts__account_id__patch",
         "parameters": [
           {

@@ -690,7 +690,8 @@ def _await_callback(port: int, expected_state: str) -> _AuthorizationResult:
             self.end_headers()
             self.wfile.write(b"Authorization received. You can close this tab.")
 
-        def log_message(self, *_args: Any) -> None:  # pragma: no cover
+        def log_message(self, format: str, *args: Any) -> None:  # pragma: no cover
+            del format, args
             return
 
     server = HTTPServer(("127.0.0.1", port), _Handler)

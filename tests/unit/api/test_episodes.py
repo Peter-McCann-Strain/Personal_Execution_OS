@@ -173,6 +173,24 @@ async def test_get_episode_stats():
     """GET /episodes/stats returns 200 with the expected stats shape."""
     mock_db = AsyncMock()
 
+    class _TrendRow:
+        date = "2026-03-15"
+        mood = 7.5
+        energy = 8.0
+        entry_count = 3
+
+        def count(self, _value: object) -> int:
+            """Mirror SQLAlchemy Row.count, which must not be mistaken for the label."""
+            return 0
+
+    class _ParaRow:
+        category = "area"
+        entry_count = 4
+
+        def count(self, _value: object) -> int:
+            """Mirror SQLAlchemy Row.count, which must not be mistaken for the label."""
+            return 0
+
     # 1) total count
     mock_total = MagicMock()
     mock_total.scalar.return_value = 10
@@ -184,13 +202,8 @@ async def test_get_episode_stats():
     mock_avg.one.return_value = mock_avg_row
 
     # 3) mood trend (daily)
-    mock_trend_row = MagicMock()
-    mock_trend_row.date = "2026-03-15"
-    mock_trend_row.mood = 7.5
-    mock_trend_row.energy = 8.0
-    mock_trend_row.count = 3
     mock_trend = MagicMock()
-    mock_trend.all.return_value = [mock_trend_row]
+    mock_trend.all.return_value = [_TrendRow()]
 
     # 4) tag frequency
     mock_tag_row = MagicMock()
@@ -200,11 +213,8 @@ async def test_get_episode_stats():
     mock_tags.all.return_value = [mock_tag_row]
 
     # 5) PARA distribution
-    mock_para_row = MagicMock()
-    mock_para_row.category = "area"
-    mock_para_row.count = 4
     mock_para = MagicMock()
-    mock_para.all.return_value = [mock_para_row]
+    mock_para.all.return_value = [_ParaRow()]
 
     mock_db.execute = AsyncMock(
         side_effect=[mock_total, mock_avg, mock_trend, mock_tags, mock_para]

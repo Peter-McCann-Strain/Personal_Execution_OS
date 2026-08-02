@@ -18,6 +18,7 @@ from src.app.agents.specialists.notification import (
     Priority,
 )
 from src.app.config import get_settings
+from src.app.core.llm_helpers import LLMClient
 from src.app.core.otel import bind_request_id, get_tracer
 from src.app.persistence.repositories.entities import (
     add_mention,
@@ -318,7 +319,10 @@ async def _run_entity_extraction(ctx: dict, payload: dict) -> dict:
         logger.error("entity_extraction_no_session_factory")
         return {"status": "error", "message": "no session_factory in context"}
 
-    client = ctx.get("llm_provider") or ctx.get("anthropic_client")
+    client: LLMClient | None = ctx.get("llm_provider") or ctx.get("anthropic_client")
+    if client is None:
+        logger.error("entity_extraction_no_model_client")
+        return {"status": "error", "message": "no model client in context"}
     extraction = await extract_entities(text_content, client)
 
     # Persist entities and relationships
@@ -416,7 +420,10 @@ async def _run_commitment_extraction(ctx: dict, payload: dict) -> dict:
     from src.app.domain.services.commitments import extract_commitments
     from src.app.persistence.repositories.commitments import create_commitment
 
-    client = ctx.get("llm_provider") or ctx.get("anthropic_client")
+    client: LLMClient | None = ctx.get("llm_provider") or ctx.get("anthropic_client")
+    if client is None:
+        logger.error("commitment_extraction_no_model_client")
+        return {"status": "error", "message": "no model client in context"}
     commitments = await extract_commitments(text_content, client)
 
     # Persist commitments

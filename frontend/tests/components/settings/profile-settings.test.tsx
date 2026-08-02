@@ -67,4 +67,23 @@ describe("ProfileSettings", () => {
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Profile settings saved");
   });
+
+  it("normalizes a blank display name and can restore the dark theme", async () => {
+    useAppStore.getState().setTheme("light");
+    renderWithProviders(<ProfileSettings />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    expect(useAppStore.getState().theme).toBe("dark");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    fireEvent.change(screen.getByPlaceholderText("Your name"), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(useAppStore.getState().profileSettings.displayName).toBe("Owner");
+    });
+    expect(screen.getByDisplayValue("Owner")).toBeInTheDocument();
+  });
 });

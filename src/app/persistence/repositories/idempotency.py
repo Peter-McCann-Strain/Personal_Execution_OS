@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import affected_rows
 from src.app.persistence.models import IdempotencyKey
 
 
@@ -155,7 +156,7 @@ async def delete_expired(session: AsyncSession) -> int:
         IdempotencyKey.recovery_point != "started",
     )
     result = await session.execute(stmt)
-    return int(result.rowcount or 0)
+    return affected_rows(result)
 
 
 def _as_json_safe(value: Any) -> Any:

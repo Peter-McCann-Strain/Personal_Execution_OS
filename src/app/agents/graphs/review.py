@@ -8,11 +8,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, TypedDict
+from typing import Any
 
 import structlog
 from anthropic import AsyncAnthropic
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.agents.specialists.review import generate_quarterly_review, generate_weekly_review
@@ -31,18 +32,43 @@ _REVIEW_DAYS: dict[str, int] = {
 }
 
 
-class ReviewState(TypedDict, total=False):
-    """State for the review subgraph."""
+class ReviewState(BaseModel):
+    """Validated review state whose explicitly set fields form node updates.
 
-    review_type: str
-    data: str
-    client: Any
-    db_session: AsyncSession
-    result: dict
-    actions: list
+    Fields default to ``None`` so LangGraph's Pydantic update extractor does not
+    overwrite prior node output with an unset model default.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    review_type: str | None = None
+    data: str | None = None
+    client: Any = None
+    db_session: AsyncSession | None = None
+    result: dict[str, Any] | None = None
+    actions: list[Any] | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        """Expose fields through the mapping interface used by existing nodes."""
+        if key not in type(self).model_fields:
+            raise KeyError(key)
+        value = getattr(self, key)
+        if value is None:
+            raise KeyError(key)
+        return value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return a state field or a caller-provided default."""
+        if key not in type(self).model_fields:
+            return default
+        value = getattr(self, key)
+        return default if value is None else value
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in self.model_fields_set
 
 
-async def gather_data_node(state: ReviewState) -> dict:
+async def gather_data_node(state: ReviewState) -> ReviewState:
     """Gather review data from the database for the relevant time period.
 
     Queries episodes and goals, then formats the data as a readable string
@@ -53,10 +79,10 @@ async def gather_data_node(state: ReviewState) -> dict:
     # If no db_session is available, fall back to any pre-supplied data string
     if db_session is None:
         logger.warning("review_gather_data_no_session", hint="using pre-supplied data")
-        return {
-            "data": state.get("data", ""),
-            "review_type": state.get("review_type", "weekly"),
-        }
+        return ReviewState(
+            data=state.get("data", ""),
+            review_type=state.get("review_type", "weekly"),
+        )
 
     review_type = state.get("review_type", "weekly")
     lookback_days = _REVIEW_DAYS.get(review_type, 7)
@@ -96,7 +122,7 @@ async def gather_data_node(state: ReviewState) -> dict:
         goal_count=len(active_goals),
     )
 
-    return {"data": data}
+    return ReviewState(data=data)
 
 
 def _format_review_data(
@@ -150,7 +176,7 @@ def _format_review_data(
     return "\n".join(lines)
 
 
-async def generate_review_node(state: ReviewState) -> dict:
+async def generate_review_node(state: ReviewState) -> ReviewState:
     """Generate the review using Opus.
 
     Dispatches to weekly or quarterly based on state['review_type'].
@@ -163,18 +189,18 @@ async def generate_review_node(state: ReviewState) -> dict:
     else:
         review = await generate_weekly_review(state.get("data", ""), client)
 
-    return {"result": review.model_dump()}
+    return ReviewState(result=review.model_dump())
 
 
-async def extract_actions_node(state: ReviewState) -> dict:
+async def extract_actions_node(state: ReviewState) -> ReviewState:
     """Extract action items from the review for follow-up."""
     result = state.get("result", {})
     # Weekly reviews use 'recommendations', quarterly uses 'next_quarter_priorities'
     actions = result.get("recommendations") or result.get("next_quarter_priorities", [])
-    return {"actions": actions}
+    return ReviewState(actions=actions)
 
 
-def build_review_graph() -> StateGraph:
+def build_review_graph() -> StateGraph[ReviewState]:
     """Build the review subgraph."""
     graph = StateGraph(ReviewState)
 

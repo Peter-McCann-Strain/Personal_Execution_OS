@@ -1,5 +1,13 @@
 name: personal-execution-os
 
+x-backend-build: &backend-build
+  context: .
+  dockerfile: docker/Dockerfile
+  args:
+    APP_VERSION: ${APP_VERSION:-0.1.1}
+    SOURCE_REPOSITORY_URL: ${VITE_SOURCE_REPOSITORY_URL:-https://github.com/Peter-McCann-Strain/Personal_Execution_OS}
+    SOURCE_REVISION: ${SOURCE_REVISION:-local}
+
 x-backend-environment: &backend-environment
   APP_ENV: production
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -99,9 +107,7 @@ services:
         max-file: "3"
 
   migrate:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    build: *backend-build
     command:
       - sh
       - -ec
@@ -125,9 +131,7 @@ services:
       - data
 
   api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    build: *backend-build
     # Backend-only env file forwards optional Settings integrations without
     # exposing credentials to the static web proxy or data services.
     env_file:
@@ -173,9 +177,7 @@ services:
         max-file: "3"
 
   worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    build: *backend-build
     command: ["arq", "src.app.workers.main.WorkerSettings"]
     env_file:
       - path: .env
@@ -225,6 +227,9 @@ services:
       dockerfile: docker/Dockerfile.web
       args:
         VITE_SOURCE_REPOSITORY_URL: ${VITE_SOURCE_REPOSITORY_URL:-}
+        APP_VERSION: ${APP_VERSION:-0.1.1}
+        SOURCE_REPOSITORY_URL: ${VITE_SOURCE_REPOSITORY_URL:-https://github.com/Peter-McCann-Strain/Personal_Execution_OS}
+        SOURCE_REVISION: ${SOURCE_REVISION:-local}
     environment:
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-}
     ports:

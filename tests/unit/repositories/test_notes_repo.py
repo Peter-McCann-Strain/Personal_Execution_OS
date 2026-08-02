@@ -10,6 +10,7 @@ import pytest
 
 from src.app.persistence.models import Note, NoteLink
 from src.app.persistence.repositories.notes import (
+    _find_note_by_reference,
     create_note,
     create_note_link,
     delete_note,
@@ -87,6 +88,21 @@ def _make_note(**overrides: object) -> Note:
     note.created_at = overrides.get("created_at", datetime.now(UTC))
     note.updated_at = overrides.get("updated_at", datetime.now(UTC))
     return note
+
+
+async def test_reference_lookup_uses_postgres_array_membership() -> None:
+    session = _make_session()
+
+    assert (
+        await _find_note_by_reference(
+            session,
+            reference="Alternative title",
+        )
+        is None
+    )
+
+    statement = str(session.execute.await_args.args[0])
+    assert "= ANY (notes.aliases)" in statement
 
 
 @pytest.mark.asyncio

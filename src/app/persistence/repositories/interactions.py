@@ -5,18 +5,54 @@ All functions require the caller to manage session.commit(). Use
 """
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
 from inspect import isawaitable
+from typing import TypedDict
 
 import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.async_utils import maybe_await
+from src.app.core.async_utils import affected_rows, maybe_await
 from src.app.domain.constants import EvalStatus, FeedbackRating
 from src.app.persistence.models import InteractionRecord
 
 logger = structlog.get_logger()
+
+
+class AverageScores(TypedDict):
+    """Typed aggregate returned by the monitoring quality-score query."""
+
+    relevance: float | None
+    actionability: float | None
+    tone: float | None
+    conciseness: float | None
+    count: int
+
+
+def _aggregate_field(row: object, name: str) -> object:
+    """Read a labelled SQLAlchemy value without tuple-method collisions."""
+    mapping = getattr(row, "_mapping", None)
+    if isinstance(mapping, Mapping):
+        return mapping.get(name)
+    return getattr(row, name, None)
+
+
+def _aggregate_score(row: object, name: str) -> float | None:
+    value = _aggregate_field(row, name)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _aggregate_count(row: object) -> int:
+    value = _aggregate_field(row, "count")
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("quality-score count query returned a non-integer value")
+    if value < 0:
+        raise ValueError("quality-score count query returned a negative value")
+    return value
 
 
 async def create_interaction(
@@ -185,7 +221,7 @@ async def update_feedback(
         )
     )
     result = await session.execute(stmt)
-    updated = result.rowcount > 0
+    updated = affected_rows(result) > 0
     if updated:
         logger.info(
             "feedback_recorded",
@@ -208,7 +244,7 @@ async def update_channel_metrics(
         .values(channel_metrics=channel_metrics)
     )
     result = await session.execute(stmt)
-    updated = result.rowcount > 0
+    updated = affected_rows(result) > 0
     if updated:
         logger.info(
             "interaction_channel_metrics_updated",
@@ -223,7 +259,7 @@ async def get_avg_scores_in_window(
     start: datetime,
     end: datetime,
     specialist: str | None = None,
-) -> dict[str, float | None]:
+) -> AverageScores:
     """Get average auto-judge scores within a time window.
 
     Returns dict with keys: relevance, actionability, tone, conciseness, count.
@@ -246,11 +282,11 @@ async def get_avg_scores_in_window(
     result = await session.execute(stmt)
     row = result.one()
     return {
-        "relevance": row.relevance,
-        "actionability": row.actionability,
-        "tone": row.tone,
-        "conciseness": row.conciseness,
-        "count": row.count,
+        "relevance": _aggregate_score(row, "relevance"),
+        "actionability": _aggregate_score(row, "actionability"),
+        "tone": _aggregate_score(row, "tone"),
+        "conciseness": _aggregate_score(row, "conciseness"),
+        "count": _aggregate_count(row),
     }
 
 

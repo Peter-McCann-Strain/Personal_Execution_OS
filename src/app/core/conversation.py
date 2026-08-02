@@ -15,6 +15,7 @@ All errors propagate — Redis failures are real failures, not silent degradatio
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
@@ -40,6 +41,29 @@ _PENDING_CONVERSATION_ACTION_KEY_PREFIX = "conv_pending_action:"
 
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
+
+
+async def _await_redis_command(value: object, *, operation: str) -> None:
+    """Require the async Redis contract instead of accepting a sync client silently."""
+    if not isinstance(value, Awaitable):
+        raise TypeError(f"Redis {operation} returned a non-awaitable result")
+    await value
+
+
+async def _await_redis_messages(value: object) -> list[str | bytes]:
+    """Validate the asynchronous LRANGE result before JSON deserialization."""
+    if not isinstance(value, Awaitable):
+        raise TypeError("Redis LRANGE returned a non-awaitable result")
+    raw_messages = await value
+    if not isinstance(raw_messages, list):
+        raise TypeError("Redis LRANGE returned a non-list result")
+
+    messages: list[str | bytes] = []
+    for raw_message in raw_messages:
+        if not isinstance(raw_message, (str, bytes)):
+            raise TypeError("Redis LRANGE returned a non-text message")
+        messages.append(raw_message)
+    return messages
 
 
 @dataclass(slots=True)
@@ -96,8 +120,14 @@ class ConversationContext:
         key = f"{_KEY_PREFIX}{user_id}"
 
         async with redis_pool(self.redis_url) as conn:
-            await conn.rpush(key, json.dumps(msg.to_dict()))
-            await conn.ltrim(key, -settings.max_context_messages, -1)
+            await _await_redis_command(
+                conn.rpush(key, json.dumps(msg.to_dict())),
+                operation="RPUSH",
+            )
+            await _await_redis_command(
+                conn.ltrim(key, -settings.max_context_messages, -1),
+                operation="LTRIM",
+            )
             await conn.expire(key, settings.session_ttl)
 
     async def get_context(self, user_id: str) -> list[ConversationMessage]:
@@ -110,7 +140,7 @@ class ConversationContext:
         key = f"{_KEY_PREFIX}{user_id}"
 
         async with redis_pool(self.redis_url) as conn:
-            raw_messages = await conn.lrange(key, 0, -1)
+            raw_messages = await _await_redis_messages(conn.lrange(key, 0, -1))
             return [ConversationMessage.from_dict(json.loads(m)) for m in raw_messages]
 
     # ------------------------------------------------------------------

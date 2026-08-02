@@ -56,7 +56,7 @@ async def _fetch_unprotected(conn: asyncpg.Connection) -> list[str]:
 async def _check(conn: asyncpg.Connection) -> int:
     unprotected = await _fetch_unprotected(conn)
     if not unprotected:
-        print("OK: all public tables have RLS enabled.")
+        print("OK: all required account-scoped public tables have RLS and isolation policy.")
         return 0
     print(f"FAIL: {len(unprotected)} tables without RLS:")
     for table in unprotected:

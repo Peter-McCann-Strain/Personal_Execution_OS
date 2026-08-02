@@ -25,10 +25,9 @@ Design goals
   the Collector can drop it for PII without touching the parent span.
   We wrap the content through ``pii_redactor.redact`` before it ever
   leaves the process when ``pii_redaction_enabled=True``.
-* **Tail-sampling belongs at the Collector, not in-process.** In-proc
-  we head-sample at ``otel_sampler_ratio``; the Collector then keeps
-  100% of errors, 100% of slow (> p95), and 10% of head-sampled
-  successes. See ``docs/OBSERVABILITY.md`` for the Collector YAML.
+* **Tail-sampling belongs at the Collector, not in-process.** In-process
+  sampling uses ``otel_sampler_ratio``. Collector policy and configuration are
+  operator-owned; this repository does not ship a collector deployment.
 * **agent_trace_spans table stays.** The DB-backed span table remains
   the source of truth for the app's own UI queries (trace viewer,
   SLO dashboards). OTEL spans are emitted **in addition**, not
@@ -129,9 +128,8 @@ def _build_sampler(settings: Settings) -> Any:
         return ALWAYS_OFF
     if name == "parentbased_traceidratio":
         return ParentBased(root=TraceIdRatioBased(settings.otel_sampler_ratio))
-    # default: parent-based always-on. Honours upstream sampling
-    # decisions (e.g. tail sampler at the Collector) and falls back to
-    # always-on for root spans.
+    # Default: parent-based always-on. It honors an upstream parent's sampling
+    # decision and samples root spans.
     return ParentBased(root=ALWAYS_ON)
 
 

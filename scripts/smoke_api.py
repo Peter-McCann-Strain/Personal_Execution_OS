@@ -1,8 +1,8 @@
 """Attach-to-a-running-server smoke checks for the API surface.
 
 Usage:
-    uv run python -m scripts.smoke_api --base-url http://127.0.0.1:8000
-    uv run smoke-api --base-url http://127.0.0.1:8000 --api-key "$CHAT_API_KEY"
+    uv run python -m scripts.smoke_api --base-url http://127.0.0.1:8001
+    uv run smoke-api --base-url http://127.0.0.1:8001 --api-key "$CHAT_API_KEY"
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--base-url",
         required=True,
-        help="API base URL, for example http://127.0.0.1:8000",
+        help="API base URL, for example http://127.0.0.1:8001",
     )
     parser.add_argument(
         "--api-key",

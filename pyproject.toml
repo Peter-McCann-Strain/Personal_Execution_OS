@@ -1,9 +1,11 @@
 [project]
 name = "personal-execution-os"
-version = "0.1.0"
+version = "0.1.1"
 description = "Self-hosted workspace for planning, commitments, reflection, and optional AI assistance"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
@@ -26,19 +28,17 @@ dependencies = [
     "jsonschema>=4.23",
     # Content curation (RSS feeds)
     "feedparser>=6.0",
-    # Chart generation (mood/energy/habit visualizations)
-    "plotly>=6.0",
-    "kaleido>=0.4",
     # Google auth (Calendar + Gmail OAuth)
     "google-auth>=2.0",
     "google-auth-oauthlib>=1.0",
     # Browser push delivery (VAPID / Web Push)
     "pywebpush>=2.0",
-    # OpenTelemetry — optional runtime dependency. The instrumentation in
-    # src/app/core/otel.py is a no-op when OTEL_EXPORTER_OTLP_ENDPOINT is
-    # empty, but the imports still need to resolve so we keep these in the
-    # main dependency set. Versions follow the April 2026 GenAI semconv
-    # (Development status — requires OTEL_SEMCONV_STABILITY_OPT_IN).
+    # OpenTelemetry is an optional runtime feature. The instrumentation in
+    # src/app/core/otel.py is a no-op unless OTEL_ENABLED is true and
+    # OTEL_EXPORTER_OTLP_ENDPOINT is set, but its imports still need to resolve,
+    # so these packages remain in the main dependency set. Versions follow the
+    # April 2026 development-status GenAI semantic conventions, which require
+    # OTEL_SEMCONV_STABILITY_OPT_IN.
     "opentelemetry-api>=1.28",
     "opentelemetry-sdk>=1.28",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
@@ -46,6 +46,13 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.28",
     "pyjwt[crypto]>=2.10",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Peter-McCann-Strain/Personal_Execution_OS"
+Documentation = "https://github.com/Peter-McCann-Strain/Personal_Execution_OS/blob/main/docs/README.md"
+Repository = "https://github.com/Peter-McCann-Strain/Personal_Execution_OS"
+Issues = "https://github.com/Peter-McCann-Strain/Personal_Execution_OS/issues"
+Changelog = "https://github.com/Peter-McCann-Strain/Personal_Execution_OS/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mutation-gate = "scripts.mutation_gate:main"
@@ -63,12 +70,12 @@ dev = [
     "ruff>=0.11",
     "ty>=0.0.1a0",
     "bandit>=1.8",
-    # Used by dataset curation (KMeans clustering for diversity sampling).
-    # Kept as dev-only: curation runs in the worker image which installs
-    # the [eval] extra; unit tests mock sklearn so the dev install is enough.
+    # Provides the optimized KMeans path for curation development and tests.
+    # The Compose worker uses the production dependency set and falls back to
+    # the pure-Python implementation.
     "scikit-learn>=1.4",
 ]
-# Runtime eval dependencies — included in the worker Docker image.
+# Optional optimized curation dependency for custom worker builds.
 eval = [
     "scikit-learn>=1.4",
 ]

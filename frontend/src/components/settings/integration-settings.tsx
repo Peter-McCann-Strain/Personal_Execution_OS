@@ -18,7 +18,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
-  createConnectorAccount,
   deleteConnectorAccount,
   listConnectorAccounts,
   listConnectorDocuments,
@@ -36,6 +35,7 @@ import type { ConnectorAccount, ConnectorSyncJob, HealthServiceState } from "@/t
 
 interface IntegrationConfig {
   key: string;
+  healthKey?: string;
   label: string;
   description: string;
   icon: LucideIcon;
@@ -45,7 +45,7 @@ const connectorConfigs: IntegrationConfig[] = [
   {
     key: "gmail",
     label: "Gmail",
-    description: "Read-only email search, sync, cited retrieval, and editable local drafts.",
+    description: "Read-only email search, sync, and cited retrieval.",
     icon: Mail,
   },
   {
@@ -60,19 +60,12 @@ const connectorConfigs: IntegrationConfig[] = [
     description: "Docs, Sheets, Slides, and source-pack ingestion.",
     icon: Database,
   },
-  {
-    key: "tavily",
-    label: "Tavily",
-    description: "Research search, retrieval, and proactive background scans.",
-    icon: Search,
-  },
 ];
-
-const googleConnectorKeys = new Set(["gmail", "google_calendar", "google_drive"]);
 
 const serviceConfigs: IntegrationConfig[] = [
   {
     key: "anthropic",
+    healthKey: "llm",
     label: "Anthropic",
     description: "Primary reasoning models for agent execution.",
     icon: Sparkles,
@@ -82,6 +75,12 @@ const serviceConfigs: IntegrationConfig[] = [
     label: "Ollama",
     description: "Local embeddings and offline vector tooling.",
     icon: Brain,
+  },
+  {
+    key: "tavily",
+    label: "Tavily",
+    description: "Research search and optional proactive background scans.",
+    icon: Search,
   },
   {
     key: "posthog",
@@ -154,7 +153,7 @@ function IntegrationSettings() {
 
       <div className="grid grid-cols-1 gap-4">
         {serviceConfigs.map((config) => {
-          const service = healthQuery.data?.services[config.key];
+          const service = healthQuery.data?.services[config.healthKey ?? config.key];
           return (
             <ServiceCard
               key={config.key}
@@ -187,24 +186,12 @@ function ConnectorCard({
 
   const connectMutation = useMutation({
     mutationFn: async () => {
-      if (googleConnectorKeys.has(config.key)) {
-        const response = await startGoogleOAuth(config.key);
-        window.location.assign(response.auth_url);
-        return {
-          id: account?.id ?? config.key,
-          status: "redirecting",
-        } as ConnectorAccount;
-      }
-      if (account) {
-        return updateConnectorAccount(account.id, { status: "connected" });
-      }
-      return createConnectorAccount({
-        connector_type: config.key,
-        display_name: config.label,
-        auto_use: true,
-        background_access: false,
-        sync_enabled: true,
-      });
+      const response = await startGoogleOAuth(config.key);
+      window.location.assign(response.auth_url);
+      return {
+        id: account?.id ?? config.key,
+        status: "redirecting",
+      } as ConnectorAccount;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["connector-accounts"] });

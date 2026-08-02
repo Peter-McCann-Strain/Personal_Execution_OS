@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -83,6 +84,27 @@ class AssistantNativeEvalResult(BaseModel):
     passing: bool
     failing_case_ids: list[str] = Field(default_factory=list)
     cases: list[AssistantNativeEvalCaseResult] = Field(default_factory=list)
+
+
+class ContinuityResolver(Protocol):
+    """Callable shape shared by live and baseline continuity resolvers."""
+
+    def __call__(
+        self,
+        message: MessageInput,
+        *,
+        pending_action: PendingConversationAction | None,
+        recent_artifacts: list[object],
+    ) -> ContinuityResolution: ...
+
+
+class _AssistantNativeCaseOutcome(TypedDict):
+    """Typed internal projection consumed by the aggregate evaluator."""
+
+    passed: bool
+    failures: list[str]
+    resolution_type: str | None
+    forced_specialist: str | None
 
 
 @cache
@@ -202,8 +224,8 @@ def evaluate_assistant_native_replays(
 def _run_case(
     case: AssistantNativeEvalCase,
     *,
-    resolver,
-) -> dict[str, object]:
+    resolver: ContinuityResolver,
+) -> _AssistantNativeCaseOutcome:
     message = MessageInput(
         content=case.message_content,
         source="eval",
@@ -214,7 +236,7 @@ def _run_case(
         if isinstance(case.pending_action, dict)
         else None
     )
-    recent_artifacts = [
+    recent_artifacts: list[object] = [
         SimpleNamespace(
             artifact_type="conversation_action",
             payload=PendingConversationAction.model_validate(action).model_dump(mode="json"),

@@ -13,39 +13,25 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from hashlib import blake2s
-from numbers import Real
 
 import structlog
 from anthropic import AsyncAnthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.config import Settings, get_settings
+from src.app.config import get_settings
 from src.app.core.confirmation import is_explicit_confirmation, is_explicit_rejection
-from src.app.core.context_engine import ContextInspection
 from src.app.core.context_manager import AssembledContext, assemble_context
 from src.app.core.conversation import ConversationContext
 from src.app.core.conversation_actions import ContinuityResolution, resolve_conversation_continuity
-from src.app.core.evaluator import (
-    EvaluationResult,
-    evaluate_response,
-    evaluate_response_deterministic,
-)
-from src.app.core.exceptions import AppError, ConfigError, EvaluationError
-from src.app.core.llm_helpers import call_and_extract_text
+from src.app.core.evaluator import evaluate_response
+from src.app.core.exceptions import ConfigError
 from src.app.core.observability import calculate_cost
-from src.app.core.response_envelope import build_response_envelope, render_response_envelope
-from src.app.core.response_style import normalize_response
 from src.app.core.security import trust_label_for_message_source
 from src.app.core.state_packet import build_session_state_packet, merge_persisted_artifacts
-from src.app.core.telemetry import get_telemetry
-from src.app.core.trace import TraceRecorder, get_or_create_trace_recorder
-from src.app.core.workflow_runtime import (
-    LiveWorkflowOutcome,
-    maybe_execute_live_workflow,
-)
-from src.app.core.workflow_shadow import ShadowWorkflowOutcome, maybe_run_shadow_workflow
-from src.app.domain.constants import EvalStatus, TraceSpanKind, TraceSpanStatus, WorkflowStatus
+from src.app.core.trace import get_or_create_trace_recorder
+from src.app.core.workflow_runtime import maybe_execute_live_workflow
+from src.app.core.workflow_shadow import maybe_run_shadow_workflow
+from src.app.domain.constants import TraceSpanKind, TraceSpanStatus, WorkflowStatus
 from src.app.domain.models import (
     ArtifactRecord,
     ChatResponse,
@@ -55,11 +41,66 @@ from src.app.domain.models import (
     PendingConversationAction,
     PendingPlanningSession,
     PendingToolPlan,
-    ResponseEnvelope,
-    ResponseQuality,
     SessionStatePacket,
     Specialist,
     WorkflowState,
+)
+from src.app.domain.services._chat_context import (
+    build_context_inspection as _build_context_inspection,
+)
+from src.app.domain.services._chat_context import (
+    build_specialist_message as _build_specialist_message,
+)
+from src.app.domain.services._chat_context import (
+    normalize_context_result as _normalize_context_result,
+)
+from src.app.domain.services._chat_context import (
+    retrieve_supporting_context as _retrieve_supporting_context,
+)
+from src.app.domain.services._chat_context import (
+    should_skip_retrieval as _should_skip_retrieval,
+)
+from src.app.domain.services._chat_context import (
+    touch_retrieved_saved_memories as _touch_retrieved_saved_memories,
+)
+from src.app.domain.services._chat_execution import (
+    evaluate_and_optimize_response as _evaluate_and_optimize_response,
+)
+from src.app.domain.services._chat_execution import (
+    execute_specialist_stage as _execute_specialist_stage,
+)
+from src.app.domain.services._chat_execution import (
+    handle_conversational_intent as _handle_conversational_intent,
+)
+from src.app.domain.services._chat_persistence import (
+    persist_recorded_trace as persist_recorded_trace,
+)
+from src.app.domain.services._chat_persistence import (
+    record_workflow_step as _record_workflow_step,
+)
+from src.app.domain.services._chat_persistence import (
+    sync_approval_request_for_response as _sync_approval_request_for_response,
+)
+from src.app.domain.services._chat_persistence import (
+    upsert_workflow_run_record as _upsert_workflow_run_record,
+)
+from src.app.domain.services._chat_quality import (
+    coerce_quality_record as _coerce_quality_record,
+)
+from src.app.domain.services._chat_quality import (
+    post_process_response as _post_process_response,
+)
+from src.app.domain.services._chat_quality import (
+    runtime_eval_status as _runtime_eval_status,
+)
+from src.app.domain.services._chat_quality import (
+    shadow_workflow_details as _shadow_workflow_details,
+)
+from src.app.domain.services._chat_quality import (
+    shadow_workflow_summary as _shadow_workflow_summary,
+)
+from src.app.domain.services._chat_quality import (
+    should_sample_runtime_evaluation as _should_sample_runtime_evaluation,
 )
 from src.app.domain.services.day_plans import planning_session_is_active
 from src.app.domain.services.handlers import (
@@ -75,109 +116,29 @@ from src.app.domain.services.handlers import (
     handle_socratic,
     handle_tools,
 )
-from src.app.domain.services.handlers.memory import (
-    _dedupe_chunks as _dedupe_retrieved_chunks,
-)
-from src.app.domain.services.handlers.memory import (
-    _extract_query as _extract_retrieval_query,
-)
-from src.app.domain.services.handlers.memory import (
-    _retrieve_context as _retrieve_memory_context,
-)
-from src.app.domain.services.handlers.memory import (
-    _retrieve_interaction_context as _retrieve_interaction_context,
-)
 from src.app.domain.services.orchestrator import classify_intent
 from src.app.domain.services.web_push import dispatch_web_push_for_approval
 from src.app.persistence.repositories.interactions import create_interaction
 from src.app.persistence.repositories.runtime_records import (
-    create_approval_request,
     create_artifact_record,
     create_workflow_run,
-    create_workflow_run_step,
     get_latest_pending_workflow_checkpoint_for_user,
-    get_pending_approval_request_for_checkpoint,
     list_recent_artifacts_for_user,
-    resolve_approval_request,
-    update_workflow_run,
 )
-from src.app.persistence.repositories.saved_memories import (
-    mark_saved_memories_used as mark_retrieved_saved_memories_used,
-)
-from src.app.persistence.repositories.traces import create_trace_spans
 
 logger = structlog.get_logger()
 SpecialistHandler = Callable[
     [MessageInput, AsyncAnthropic, AsyncSession, Intent],
     Awaitable[ChatResponse],
 ]
-
-
-def _normalize_context_result(
-    result: object,
-    *,
-    conversation_messages: list[dict[str, str]],
-    conversation_summary: str,
-    user_message: str,
-) -> tuple[object, ContextInspection | None]:
-    """Normalize context-engine results for backward-compatible callers."""
-    del conversation_messages, conversation_summary, user_message
-
-    if hasattr(result, "assembled") and hasattr(result, "inspection"):
-        wrapped = result
-        return wrapped.assembled, wrapped.inspection
-
-    if hasattr(result, "conversation_context") and hasattr(result, "rag_context"):
-        return result, None
-
-    msg = f"Unsupported context result type: {type(result)!r}"
-    raise TypeError(msg)
-
-
-async def _upsert_workflow_run_record(
-    session: AsyncSession,
-    *,
-    workflow_id: str,
-    status: str,
-    source: str,
-    user_id: str,
-    message_content: str,
-    trace_id: str | None,
-    interaction_id: str | None = None,
-    specialist: str | None = None,
-    response_id: str | None = None,
-    flags: list[str] | None = None,
-    details: dict | None = None,
-) -> bool:
-    """Create or update the workflow run backing the current interaction."""
-    updated = await update_workflow_run(
-        session,
-        workflow_id,
-        status=status,
-        specialist=specialist,
-        trace_id=trace_id,
-        response_id=response_id,
-        details=details,
-    )
-    if updated:
-        return True
-
-    await create_workflow_run(
-        session,
-        WorkflowState(
-            workflow_id=workflow_id,
-            status=status,
-            source=source,
-            user_id=user_id,
-            message_content=message_content,
-            trace_id=trace_id,
-            interaction_id=interaction_id,
-            specialist=specialist,
-            flags=flags or [],
-            details=details or {},
-        ),
-    )
-    return True
+__all__ = [
+    "_coerce_quality_record",
+    "_get_conversation_context",
+    "_normalize_context_result",
+    "_retrieve_supporting_context",
+    "persist_recorded_trace",
+    "process_message",
+]
 
 
 async def _recover_pending_tool_plan_from_checkpoint(
@@ -207,145 +168,6 @@ async def _recover_pending_tool_plan_from_checkpoint(
         return None
 
 
-async def _record_workflow_step(
-    session: AsyncSession,
-    *,
-    workflow_id: str,
-    step_type: str,
-    title: str,
-    status: str = "completed",
-    details: dict | None = None,
-) -> None:
-    """Persist a workflow timeline step without breaking the main request on failure."""
-    try:
-        await create_workflow_run_step(
-            session,
-            workflow_id=workflow_id,
-            step_type=step_type,
-            title=title,
-            status=status,
-            details=details or {},
-        )
-    except Exception:
-        logger.warning("workflow_step_persist_failed", exc_info=True)
-
-
-async def _sync_approval_request_for_response(
-    session: AsyncSession,
-    *,
-    workflow_id: str,
-    pending_tool_plan: PendingToolPlan | None,
-    pending_resolution: str | None,
-    response: ChatResponse,
-) -> str | None:
-    """Create or resolve product-level approval requests around tool checkpoints."""
-    checkpoint_id = pending_tool_plan.checkpoint_id if pending_tool_plan is not None else None
-    if response.metadata.get("confirmation_required"):
-        raw_pending_plan = response.metadata.get("pending_tool_plan")
-        if isinstance(raw_pending_plan, dict):
-            checkpoint_id = raw_pending_plan.get("checkpoint_id") or checkpoint_id
-        existing = await get_pending_approval_request_for_checkpoint(
-            session,
-            workflow_id=workflow_id,
-            checkpoint_id=checkpoint_id,
-        )
-        if existing is None:
-            tool_names = response.metadata.get("tools_pending") or []
-            approval = await create_approval_request(
-                session,
-                workflow_id=workflow_id,
-                checkpoint_id=checkpoint_id,
-                title="Approval required to continue",
-                description=(
-                    f"Confirm before executing: {', '.join(tool_names)}"
-                    if isinstance(tool_names, list) and tool_names
-                    else "Confirm before executing the pending tool action."
-                ),
-                payload={
-                    "tool_names": tool_names,
-                    "response_excerpt": response.content[:300],
-                },
-            )
-            response.metadata["approval_request_id"] = str(approval.id)
-            return str(approval.id)
-        return None
-
-    if pending_resolution is None or checkpoint_id is None:
-        return None
-
-    existing = await get_pending_approval_request_for_checkpoint(
-        session,
-        workflow_id=workflow_id,
-        checkpoint_id=checkpoint_id,
-    )
-    if existing is None:
-        return None
-    await resolve_approval_request(
-        session,
-        approval_id=str(existing.id),
-        status="approved" if pending_resolution == "confirm" else "rejected",
-        payload={
-            **(existing.payload or {}),
-            "response_excerpt": response.content[:300],
-        },
-    )
-    return None
-
-
-async def _handle_conversational_intent(
-    message: MessageInput,
-    client: AsyncAnthropic,
-    *,
-    settings: Settings,
-    specialist_context: str,
-    workflow_id: str,
-) -> ChatResponse:
-    """Answer general conversational turns without routing to a specialist handler."""
-    system = (
-        "You are the user's personal AI assistant. "
-        "Answer the question directly and helpfully. "
-        "Use your training knowledge to respond to factual, comparison, "
-        "or general questions. "
-        "If asked about live data (weather, prices, current events) "
-        "explain clearly that you don't have real-time access and "
-        "suggest where to find it. "
-        "Format responses for Telegram: use HTML tags (<b>, <i>, <code>) sparingly, "
-        "keep it concise unless depth is explicitly requested. "
-        "Do not offer a list of capabilities unless asked what you can do."
-    )
-    if specialist_context:
-        system += f"\n\n<context>\n{specialist_context}\n</context>"
-    try:
-        answer = await call_and_extract_text(
-            client,
-            model=settings.memory_model,
-            max_tokens=2048,
-            system=system,
-            messages=[{"role": "user", "content": message.content}],
-            error_context="conversational",
-            timeout_seconds=60.0,
-            inject_personality=True,
-        )
-    except Exception as exc:
-        logger.warning("conversational_llm_failed", error=str(exc))
-        answer = (
-            "I'm not sure what you'd like me to do with that.\n\n"
-            "<b>I handle:</b>\n"
-            "• 📝 <b>Diary</b> — capture thoughts, mood, daily events\n"
-            "• 🔍 <b>Memory</b> — search everything you've captured\n"
-            "• 📋 <b>Projects</b> — tasks, planning, prioritisation\n"
-            "• 📅 <b>Calendar / Email</b> — schedule and communications\n"
-            "• 🔔 <b>Reminders</b> — alerts and notifications\n"
-            "• 📊 <b>Review</b> — weekly/quarterly review and patterns\n\n"
-            "What would you like me to do?"
-        )
-    return ChatResponse(
-        content=answer,
-        agent="conversational",
-        metadata={"specialist": "conversational", "workflow_id": workflow_id},
-    )
-
-
 def _get_specialist_handler(specialist: Specialist) -> SpecialistHandler:
     """Resolve the current specialist handler, preserving test-time monkeypatching."""
     handlers: dict[Specialist, SpecialistHandler] = {
@@ -366,327 +188,6 @@ def _get_specialist_handler(specialist: Specialist) -> SpecialistHandler:
         logger.error("no_handler_for_specialist", specialist=specialist)
         raise ConfigError(f"No handler configured for specialist '{specialist}'.")
     return handler
-
-
-def _build_context_inspection(
-    inspection: ContextInspection | None,
-    *,
-    assembled: AssembledContext,
-    state_packet: SessionStatePacket | None,
-    pending_tool_plan: PendingToolPlan | None,
-    pending_planning_session: PendingPlanningSession | None,
-    planning_session_active: bool,
-    pending_conversation_action: PendingConversationAction | None,
-) -> dict:
-    """Build the diagnostic context packet passed through specialist metadata."""
-    if inspection is not None:
-        return inspection.model_dump(mode="json")
-
-    return {
-        "history_summarized": assembled.history_summarized,
-        "rag_chunks_included": assembled.rag_chunks_included,
-        "rag_chunks_filtered": assembled.rag_chunks_filtered,
-        "total_tokens_estimate": assembled.total_tokens_estimate,
-        "state_packet_present": assembled.state_packet_used,
-        "state_packet_tokens": assembled.state_packet_tokens,
-        "state_packet": state_packet.model_dump(mode="json") if state_packet is not None else None,
-        "pending_tool_plan": (
-            pending_tool_plan.model_dump(mode="json") if pending_tool_plan is not None else None
-        ),
-        "pending_planning_session": (
-            pending_planning_session.model_dump(mode="json")
-            if planning_session_active and pending_planning_session is not None
-            else None
-        ),
-        "pending_conversation_action": (
-            pending_conversation_action.model_dump(mode="json")
-            if pending_conversation_action is not None
-            else None
-        ),
-    }
-
-
-def _build_specialist_message(
-    message: MessageInput,
-    *,
-    specialist_context: str,
-    context_inspection: dict,
-) -> MessageInput:
-    """Attach assembled context to the specialist-facing message only when useful."""
-    if not specialist_context:
-        return message
-
-    return MessageInput(
-        content=f"{specialist_context}\n\nCurrent message: {message.content}",
-        source=message.source,
-        user_id=message.user_id,
-        metadata={
-            **message.metadata,
-            "context_inspection": context_inspection,
-        },
-    )
-
-
-async def _execute_specialist_stage(
-    *,
-    enriched_message: MessageInput,
-    client: AsyncAnthropic,
-    session: AsyncSession,
-    intent: Intent,
-    trace_recorder: TraceRecorder,
-    request_span_id: str,
-    settings: Settings,
-    continuity_resolution: ContinuityResolution,
-    handler: SpecialistHandler,
-) -> tuple[ChatResponse, LiveWorkflowOutcome | None]:
-    """Run continuity, live workflow, or the routed specialist handler."""
-    live_workflow_outcome: LiveWorkflowOutcome | None = None
-    try:
-        response = continuity_resolution.early_response
-        if response is None:
-            live_workflow_outcome = await maybe_execute_live_workflow(
-                message=enriched_message,
-                intent=intent,
-                client=client,
-                session=session,
-                trace_recorder=trace_recorder,
-                parent_span_id=request_span_id,
-                settings=settings,
-            )
-            if live_workflow_outcome is not None and live_workflow_outcome.response is not None:
-                response = live_workflow_outcome.response
-            else:
-                with trace_recorder.timed_span(
-                    name=f"specialist.{intent.specialist}",
-                    span_kind=TraceSpanKind.SPECIALIST,
-                    parent_span_id=request_span_id,
-                    specialist=str(intent.specialist),
-                ) as specialist_span:
-                    response = await handler(enriched_message, client, session, intent)
-                    specialist_span["model"] = response.metadata.get("model")
-                    specialist_span["tokens_in"] = response.metadata.get("input_tokens")
-                    specialist_span["tokens_out"] = response.metadata.get("output_tokens")
-                    specialist_span["details"] = {
-                        "agent": response.agent,
-                        "tool_count": response.metadata.get("tool_count", 0),
-                    }
-    except AppError:
-        raise
-    except Exception as exc:
-        logger.exception(
-            "specialist_handler_error",
-            specialist=intent.specialist,
-            error_type=type(exc).__name__,
-        )
-        # Surface the specialist + underlying failure class without exposing raw exception text.
-        specialist_label = str(intent.specialist).split(".")[-1] or "specialist"
-        raise AppError(f"{specialist_label}_dependency_failed: {type(exc).__name__}") from exc
-
-    return response, live_workflow_outcome
-
-
-async def _evaluate_and_optimize_response(
-    *,
-    response: ChatResponse,
-    handler: SpecialistHandler,
-    message: MessageInput,
-    intent: Intent,
-    client: AsyncAnthropic,
-    session: AsyncSession,
-    settings: Settings,
-    trace_recorder: TraceRecorder,
-    request_span_id: str,
-    context_inspection: dict,
-    sampled_for_async_eval: bool,
-    degraded_flags: set[str],
-) -> tuple[ChatResponse, EvaluationResult, bool, str | None]:
-    """Run deterministic/sync evaluation and the optional optimizer retry."""
-    response.metadata["evaluation_mode"] = settings.runtime_eval_mode
-    response.metadata["async_evaluation_scheduled"] = sampled_for_async_eval
-
-    with trace_recorder.timed_span(
-        name="evaluation.runtime",
-        span_kind=TraceSpanKind.EVALUATION,
-        parent_span_id=request_span_id,
-        specialist=str(intent.specialist),
-    ) as evaluation_span:
-        evaluation = evaluate_response_deterministic(
-            user_message=message.content,
-            response_content=response.content,
-            specialist=str(intent.specialist),
-            source=message.source,
-            context_inspection=context_inspection,
-            response_metadata=response.metadata,
-        )
-        evaluation_degraded = False
-        if settings.runtime_eval_mode == "sync":
-            try:
-                evaluation = await evaluate_response(
-                    user_message=message.content,
-                    response_content=response.content,
-                    specialist=intent.specialist,
-                    client=client,
-                    source=message.source,
-                    context_inspection=context_inspection,
-                    response_metadata=response.metadata,
-                )
-            except Exception as exc:
-                logger.error("response_evaluation_unavailable", exc_info=True)
-                evaluation_span["status"] = TraceSpanStatus.DEGRADED
-                evaluation_span["error_class"] = type(exc).__name__
-                evaluation_degraded = True
-                response.metadata["evaluation_degraded"] = True
-                response.metadata["evaluation_error"] = type(exc).__name__
-                degraded_flags.add("evaluation")
-
-        evaluation_span["details"] = {
-            "mode": settings.runtime_eval_mode,
-            "passes": evaluation.passes,
-            "issue": evaluation.issue,
-            "final_response_quality": evaluation.final_response_quality,
-            "degraded": evaluation_degraded,
-            "async_scheduled": sampled_for_async_eval,
-        }
-
-    optimizer_triggered = False
-    optimizer_issue: str | None = None
-
-    if (
-        settings.runtime_eval_mode == "sync"
-        and settings.runtime_eval_optimizer_enabled
-        and not evaluation.passes
-        and evaluation.suggestion
-    ):
-        optimizer_triggered = True
-        optimizer_issue = evaluation.issue
-        logger.info(
-            "response_evaluation_failed_retrying",
-            specialist=intent.specialist,
-            issue_present=bool(evaluation.issue),
-        )
-        retry_message = MessageInput(
-            content=(
-                f"{message.content}\n\n"
-                f"[System note: Previous response didn't address the intent. "
-                f"Issue: {evaluation.issue}. {evaluation.suggestion}]"
-            ),
-            source=message.source,
-            user_id=message.user_id,
-            metadata=message.metadata,
-        )
-        with trace_recorder.timed_span(
-            name="evaluation.optimizer_retry",
-            span_kind=TraceSpanKind.EVALUATION,
-            parent_span_id=request_span_id,
-            specialist=str(intent.specialist),
-        ) as retry_span:
-            try:
-                response = await handler(retry_message, client, session, intent)
-            except Exception as exc:
-                logger.error("optimizer_retry_failed", exc_info=True)
-                retry_span["status"] = TraceSpanStatus.ERROR
-                retry_span["error_class"] = type(exc).__name__
-                retry_span["details"] = {"issue": evaluation.issue}
-                raise EvaluationError(
-                    f"Optimizer retry failed with {type(exc).__name__}: {exc}",
-                ) from exc
-
-    return response, evaluation, optimizer_triggered, optimizer_issue
-
-
-def _post_process_response(
-    *,
-    response: ChatResponse,
-    message: MessageInput,
-    intent: Intent,
-    evaluation: EvaluationResult,
-    retrieved_chunks: list[dict],
-    context_inspection: dict,
-    trace_recorder: TraceRecorder,
-    request_span_id: str,
-    workflow_id: str,
-    workflow_status: WorkflowStatus,
-    live_workflow_outcome: LiveWorkflowOutcome | None,
-) -> tuple[ChatResponse, ResponseQuality, ResponseEnvelope, dict]:
-    """Normalize, score, envelop, and render the routed response."""
-    response = normalize_response(response, message=message, intent=intent)
-    if retrieved_chunks:
-        response.metadata.setdefault(
-            "supporting_context_sources",
-            _supporting_context_source_summaries(retrieved_chunks),
-        )
-        if not isinstance(response.metadata.get("citations"), list):
-            response.metadata["citations"] = _build_supporting_context_citations(retrieved_chunks)
-
-    quality_record = _coerce_quality_record(
-        evaluation,
-        route_quality=1.0 if response.agent == str(intent.specialist) else 0.0,
-    )
-    if quality_record.context_quality is None:
-        quality_record.context_quality = _derive_context_quality(context_inspection)
-    if quality_record.tool_use_quality is None:
-        quality_record.tool_use_quality = _derive_tool_use_quality(response)
-    if quality_record.final_response_quality is None:
-        quality_record.final_response_quality = 1.0 if quality_record.passes else 0.5
-    if quality_record.channel_style is None:
-        quality_record.channel_style = 1.0
-
-    response.metadata["trace_id"] = trace_recorder.trace_id
-    response.metadata["workflow_id"] = workflow_id
-    response.metadata["workflow_status"] = str(workflow_status)
-    response.metadata["quality"] = quality_record.model_dump(mode="json")
-    if live_workflow_outcome is not None:
-        response.metadata["workflow_runtime"] = live_workflow_outcome.model_dump(
-            mode="json",
-            exclude={"response"},
-        )
-
-    envelope = build_response_envelope(
-        response,
-        message=message,
-        intent=intent,
-        quality=quality_record,
-    )
-    envelope.trace_id = trace_recorder.trace_id
-    envelope.workflow_id = workflow_id
-    envelope.workflow_status = str(workflow_status)
-    response.metadata["response_id"] = envelope.response_id
-
-    with trace_recorder.timed_span(
-        name=f"render.{message.source}",
-        span_kind=TraceSpanKind.RENDER,
-        parent_span_id=request_span_id,
-        specialist=str(intent.specialist),
-    ) as render_span:
-        rendered_content, channel_metrics = render_response_envelope(
-            envelope,
-            message=message,
-            metadata=response.metadata,
-        )
-        channel_metrics.update(
-            _assistant_native_channel_metrics(
-                message=message,
-                response=response,
-            )
-        )
-        render_span["details"] = channel_metrics
-
-    response = response.model_copy(
-        update={
-            "content": rendered_content,
-            "metadata": {
-                **response.metadata,
-                "trace_id": trace_recorder.trace_id,
-                "workflow_id": workflow_id,
-                "workflow_status": str(workflow_status),
-                "response_id": envelope.response_id,
-                "quality": quality_record.model_dump(mode="json"),
-                "channel_metrics": channel_metrics,
-                "_response_envelope": envelope.model_dump(mode="json"),
-            },
-        }
-    )
-    return response, quality_record, envelope, channel_metrics
 
 
 async def process_message(
@@ -1111,6 +612,7 @@ async def process_message(
             settings=settings,
             continuity_resolution=continuity_resolution,
             handler=handler,
+            live_workflow_executor=maybe_execute_live_workflow,
         )
 
         if live_workflow_outcome is not None and live_workflow_outcome.status in {
@@ -1141,6 +643,7 @@ async def process_message(
             context_inspection=context_inspection,
             sampled_for_async_eval=sampled_for_async_eval,
             degraded_flags=degraded_flags,
+            response_evaluator=evaluate_response,
         )
         response, quality_record, envelope, channel_metrics = _post_process_response(
             response=response,
@@ -1507,371 +1010,6 @@ def _estimate_interaction_cost(response: ChatResponse) -> float | None:
         except (TypeError, ValueError):
             return None
     return None
-
-
-async def _retrieve_supporting_context(
-    message: MessageInput,
-    *,
-    session: AsyncSession,
-    user_id: str,
-) -> list[dict]:
-    """Retrieve durable supporting evidence for the main chat path."""
-    normalized_query = _extract_retrieval_query(message.content)
-    if not normalized_query:
-        return []
-
-    suppressed_sources = _resolve_retrieval_suppressed_sources(message.metadata)
-
-    chunks = await _retrieve_memory_context(
-        normalized_query,
-        session,
-        user_id=user_id,
-        suppressed_sources=suppressed_sources,
-    )
-    if user_id and "episode" not in suppressed_sources:
-        chunks.extend(
-            await _retrieve_interaction_context(
-                normalized_query,
-                session,
-                user_id=user_id,
-            )
-        )
-    return _dedupe_retrieved_chunks(chunks)
-
-
-async def _touch_retrieved_saved_memories(
-    session: AsyncSession,
-    *,
-    user_id: str,
-    retrieved_chunks: list[dict],
-) -> None:
-    """Record that explicit saved memories influenced the current answer path."""
-    memory_ids: list[uuid.UUID] = []
-    for chunk in retrieved_chunks:
-        if chunk.get("source_type") != "saved_memory":
-            continue
-        source_id = str(chunk.get("source_id") or "").strip()
-        if not source_id:
-            continue
-        try:
-            memory_ids.append(uuid.UUID(source_id))
-        except ValueError:
-            continue
-    if not memory_ids:
-        return
-    await mark_retrieved_saved_memories_used(
-        session,
-        user_id=user_id,
-        memory_ids=memory_ids,
-    )
-
-
-def _resolve_retrieval_suppressed_sources(metadata: dict | None) -> set[str]:
-    """Normalize per-request retrieval suppression flags carried in message metadata."""
-    if not isinstance(metadata, dict):
-        return set()
-
-    raw_sources = metadata.get("suppressed_sources", [])
-    if isinstance(raw_sources, str):
-        raw_values = [raw_sources]
-    elif isinstance(raw_sources, list):
-        raw_values = raw_sources
-    else:
-        raw_values = []
-
-    suppressed = {str(value).strip() for value in raw_values if str(value).strip()}
-    if bool(metadata.get("sensitive_mode")):
-        suppressed |= {"saved_memory", "connector_document"}
-    return suppressed
-
-
-def _build_supporting_context_citations(retrieved_chunks: list[dict]) -> list[dict[str, str]]:
-    """Convert retrieved context into lightweight citations for the response envelope."""
-    citations: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for chunk in retrieved_chunks:
-        source_type = str(chunk.get("source_type") or "supporting_context")
-        source_id = str(chunk.get("source_id") or "").strip()
-        if not source_id:
-            continue
-        key = (source_type, source_id)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        metadata = chunk.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
-
-        excerpt = str(chunk.get("content") or "").strip()
-        label = _supporting_context_label(
-            source_type=source_type,
-            source_id=source_id,
-            metadata=metadata,
-        )
-        citation: dict[str, str] = {
-            "source_id": source_id,
-            "source_type": source_type,
-            "label": label,
-        }
-        if excerpt:
-            citation["excerpt"] = excerpt[:180]
-        timestamp = (
-            metadata.get("created_at") or metadata.get("updated_at") or metadata.get("synced_at")
-        )
-        if timestamp:
-            citation["timestamp"] = str(timestamp)
-        source_url = metadata.get("source_url") or metadata.get("web_view_link")
-        if isinstance(source_url, str) and source_url.strip():
-            citation["url"] = source_url.strip()
-        citations.append(citation)
-        if len(citations) >= 6:
-            break
-    return citations
-
-
-def _supporting_context_source_summaries(retrieved_chunks: list[dict]) -> list[dict[str, str]]:
-    """Expose retrieved source summaries in response metadata for UI inspection."""
-    summaries: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for chunk in retrieved_chunks:
-        source_type = str(chunk.get("source_type") or "supporting_context")
-        source_id = str(chunk.get("source_id") or "").strip()
-        if not source_id:
-            continue
-        key = (source_type, source_id)
-        if key in seen:
-            continue
-        seen.add(key)
-        metadata = chunk.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
-        summaries.append(
-            {
-                "source_type": source_type,
-                "source_id": source_id,
-                "label": _supporting_context_label(
-                    source_type=source_type,
-                    source_id=source_id,
-                    metadata=metadata,
-                ),
-            }
-        )
-        if len(summaries) >= 8:
-            break
-    return summaries
-
-
-def _supporting_context_label(
-    *,
-    source_type: str,
-    source_id: str,
-    metadata: dict[str, object],
-) -> str:
-    """Render a human label for a retrieved evidence source."""
-    title = metadata.get("title")
-    if isinstance(title, str) and title.strip():
-        return title.strip()
-
-    if source_type == "episode":
-        summary = metadata.get("summary")
-        if isinstance(summary, str) and summary.strip():
-            return summary.strip()[:80]
-        return "Recent chat"
-    if source_type == "note":
-        return "Note"
-    if source_type == "entity":
-        entity_type = metadata.get("entity_type")
-        return (
-            f"Entity ({entity_type})"
-            if isinstance(entity_type, str) and entity_type.strip()
-            else "Entity"
-        )
-    if source_type == "saved_memory":
-        return "Saved memory"
-    if source_type == "connector_document":
-        connector_source_type = metadata.get("connector_source_type")
-        if isinstance(connector_source_type, str) and connector_source_type.strip():
-            return connector_source_type.replace("_", " ").title()
-        return "Synced connector data"
-    if source_type == "interaction":
-        return "Recent interaction"
-    if source_type == "session":
-        return "Session state"
-    return source_id
-
-
-def _should_skip_retrieval(
-    content: str,
-    pending_tool_plan: PendingToolPlan | None,
-) -> bool:
-    """Skip retrieval for pure confirmation flows where evidence adds no value."""
-    if pending_tool_plan is None:
-        return False
-    return is_explicit_confirmation(content) or is_explicit_rejection(content)
-
-
-async def persist_recorded_trace(
-    session: AsyncSession,
-    metadata: dict,
-) -> int:
-    """Persist any recorded spans attached to a message metadata dict."""
-    recorder = metadata.get("_trace_recorder")
-    if not isinstance(recorder, TraceRecorder):
-        return 0
-    if metadata.get("_trace_persisted"):
-        return 0
-    if not recorder.spans:
-        return 0
-
-    await create_trace_spans(
-        session,
-        [span.to_record() for span in recorder.spans],
-    )
-    await session.commit()
-    get_telemetry().record_trace(recorder)
-    metadata["_trace_persisted"] = True
-    return len(recorder.spans)
-
-
-def _derive_context_quality(context_inspection: dict) -> float:
-    """Derive a conservative context quality score from assembly metadata."""
-    total_tokens = int(context_inspection.get("total_tokens_estimate", 0) or 0)
-    pruned = int(context_inspection.get("pruned_messages", 0) or 0)
-    rag_filtered = int(context_inspection.get("rag_chunks_filtered", 0) or 0)
-
-    if total_tokens == 0:
-        return 0.5
-    if pruned == 0 and rag_filtered == 0:
-        return 0.95
-    if rag_filtered > 0 or pruned > 0:
-        return 0.8
-    return 0.7
-
-
-def _assistant_native_channel_metrics(
-    *,
-    message: MessageInput,
-    response: ChatResponse,
-) -> dict[str, object]:
-    """Project assistant-native continuity and receipt signals into channel metrics."""
-    continuity = message.metadata.get("continuity_resolution")
-    if not isinstance(continuity, dict):
-        continuity = response.metadata.get("continuity_resolution")
-    continuity_type = continuity.get("type") if isinstance(continuity, dict) else None
-    continuity_type = continuity_type if isinstance(continuity_type, str) else None
-
-    return {
-        "continuity_resolution_type": continuity_type,
-        "continuity_retry_replayed": continuity_type
-        in {
-            "retry_pending_action",
-            "retry_recent_artifact",
-        },
-        "continuity_duplicate_prevented": continuity_type == "already_completed_action",
-        "continuity_note_reference_resolved": continuity_type == "resolved_note_reference",
-        "assistant_receipt_present": isinstance(response.metadata.get("receipt_text"), str),
-        "pending_action_cleared": bool(
-            response.metadata.get("pending_conversation_action_cleared", False)
-        ),
-        "project_draft_created": bool(response.metadata.get("draft_created", False)),
-        "project_draft_id": str(response.metadata.get("project_draft_id"))
-        if response.metadata.get("project_draft_id")
-        else None,
-    }
-
-
-def _derive_tool_use_quality(response: ChatResponse) -> float | None:
-    """Derive a lightweight tool-use quality score from response metadata."""
-    tool_count = response.metadata.get("tool_count")
-    if tool_count in (None, 0):
-        return None
-    errors = int(response.metadata.get("errors", 0) or 0)
-    if errors <= 0:
-        return 0.95
-    return max(0.3, 1.0 - (errors * 0.3))
-
-
-def _coerce_quality_record(
-    evaluation: object,
-    *,
-    route_quality: float | None,
-):
-    """Convert evaluator output into a ResponseQuality, tolerating test doubles."""
-    from src.app.domain.models import ResponseQuality
-
-    if isinstance(evaluation, ResponseQuality):
-        return evaluation
-
-    if hasattr(evaluation, "to_quality_record"):
-        candidate = evaluation.to_quality_record(route_quality=route_quality)
-        if isinstance(candidate, ResponseQuality):
-            return candidate
-
-    return ResponseQuality(
-        route_quality=route_quality,
-        context_quality=_coerce_optional_score(getattr(evaluation, "context_quality", None)),
-        tool_use_quality=_coerce_optional_score(getattr(evaluation, "tool_use_quality", None)),
-        final_response_quality=_coerce_optional_score(
-            getattr(evaluation, "final_response_quality", None)
-        ),
-        grounding=_coerce_optional_score(getattr(evaluation, "grounding", None)),
-        channel_style=_coerce_optional_score(getattr(evaluation, "channel_style", None)),
-        passes=bool(getattr(evaluation, "passes", True)),
-        issue=str(getattr(evaluation, "issue", "")),
-        suggestion=str(getattr(evaluation, "suggestion", "")),
-    )
-
-
-def _coerce_optional_score(value: object) -> float | None:
-    """Return a numeric score or None for non-numeric test doubles."""
-    if isinstance(value, Real) and not isinstance(value, bool):
-        return float(value)
-    return None
-
-
-def _should_sample_runtime_evaluation(*, trace_id: str, sample_rate: float) -> bool:
-    """Deterministically sample interactions for async evaluation."""
-    if sample_rate <= 0.0:
-        return False
-    if sample_rate >= 1.0:
-        return True
-    digest = blake2s(trace_id.encode("utf-8"), digest_size=4).digest()
-    bucket = int.from_bytes(digest, "big") / 0xFFFFFFFF
-    return bucket < sample_rate
-
-
-def _runtime_eval_status(sampled_for_async_eval: bool) -> str:
-    """Return the persisted evaluation lifecycle state for this interaction."""
-    if sampled_for_async_eval:
-        return str(EvalStatus.PENDING)
-    return str(EvalStatus.SKIPPED)
-
-
-def _shadow_workflow_summary(outcome: ShadowWorkflowOutcome) -> str:
-    """Return a compact operator-facing summary for one shadow run."""
-    match = "match" if outcome.route_match else "mismatch"
-    shadow_specialist = outcome.shadow_specialist or "unknown"
-    return (
-        f"shadow {outcome.status}: live={outcome.live_specialist} "
-        f"shadow={shadow_specialist} {match}"
-    )[:500]
-
-
-def _shadow_workflow_details(outcome: ShadowWorkflowOutcome) -> dict:
-    """Project a shadow outcome into workflow metadata."""
-    return {
-        "live_workflow_id": outcome.live_workflow_id,
-        "live_specialist": outcome.live_specialist,
-        "shadow_specialist": outcome.shadow_specialist,
-        "route_match": outcome.route_match,
-        "shadow_status": outcome.status,
-        "executed": outcome.executed,
-        "skipped_reason": outcome.skipped_reason,
-        "confidence": outcome.confidence,
-        "latency_ms": outcome.latency_ms,
-        "result_preview": outcome.result_preview,
-    }
 
 
 def _get_conversation_context() -> ConversationContext | None:

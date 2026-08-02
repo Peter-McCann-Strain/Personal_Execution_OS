@@ -359,8 +359,8 @@ class TestCalibrateReport:
 
 
 # ---------------------------------------------------------------------------
-# Auto-trigger integration — a simple smoke that the config flag plumbs
-# into the version-change helper as documented in CLAUDE.md.
+# Auto-trigger integration — a smoke that the config flag reaches the
+# version-change helper.
 # ---------------------------------------------------------------------------
 
 

@@ -60,7 +60,8 @@ def _serialize_value(value: Any) -> Any:
 def _serialize_model(row: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for column in row.__table__.columns:
-        payload[column.name] = _serialize_value(getattr(row, column.key))
+        attribute_key = row.__mapper__.get_property_by_column(column).key
+        payload[column.name] = _serialize_value(getattr(row, attribute_key))
     return payload
 
 

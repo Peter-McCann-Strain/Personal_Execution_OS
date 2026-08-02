@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import maybe_await
 from src.app.persistence.models import (
     ConnectorAccount,
     ConnectorDocument,
@@ -319,19 +320,19 @@ async def list_connector_documents(
         )
 
     count_result = await session.execute(select(func.count()).select_from(stmt.subquery()))
-    total_value = count_result.scalar_one()
-    if inspect.isawaitable(total_value):
-        total_value = await total_value
-    total = int(total_value)
+    total_value = await maybe_await(count_result.scalar_one())
+    if isinstance(total_value, bool) or not isinstance(total_value, int):
+        msg = "connector document count query returned a non-integer value"
+        raise TypeError(msg)
+    if total_value < 0:
+        msg = "connector document count query returned a negative value"
+        raise ValueError(msg)
+    total = total_value
     result = await session.execute(
         stmt.order_by(ConnectorDocument.synced_at.desc()).offset(offset).limit(limit)
     )
-    scalars = result.scalars()
-    if inspect.isawaitable(scalars):
-        scalars = await scalars
-    rows = scalars.all()
-    if inspect.isawaitable(rows):
-        rows = await rows
+    scalars = await maybe_await(result.scalars())
+    rows = await maybe_await(scalars.all())
     return list(rows), total
 
 

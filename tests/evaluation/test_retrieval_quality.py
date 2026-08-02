@@ -55,7 +55,7 @@ DATASETS_DIR = REPO_ROOT / "data" / "evaluation" / "datasets"
 BASELINE_PATH = REPO_ROOT / "data" / "evaluation" / "baselines" / "retrieval.json"
 
 K = 10  # cut-off used for @k metrics throughout
-MAX_REGRESSION_DEFAULT = 0.03  # 3% — matches CLAUDE.md's quality envelope
+MAX_REGRESSION_DEFAULT = 0.03  # 3% default retrieval-quality envelope
 
 # Stopwords kept tiny on purpose — just enough to stop "a/the/is" dominating
 # the salience extractor below.

@@ -163,6 +163,18 @@ class TestConversationContext:
         assert messages[1].role == "assistant"
         assert messages[1].agent == "diary"
 
+    async def test_get_context_rejects_non_text_redis_entries(self):
+        """Corrupted Redis list entries should fail before JSON deserialization."""
+        mock_conn = self._make_mock_redis()
+        mock_conn.lrange = AsyncMock(return_value=[{"role": "user", "content": "unsafe"}])
+        ctx = ConversationContext(redis_url="redis://localhost:6379")
+
+        with (
+            patch("src.app.core.redis.redis_pool", _mock_redis_pool(mock_conn)),
+            pytest.raises(TypeError, match="non-text message"),
+        ):
+            await ctx.get_context("user-1")
+
     async def test_get_context_raises_on_redis_failure(self):
         """Redis failure propagates — no silent degradation."""
         ctx = ConversationContext(redis_url="redis://localhost:6379")

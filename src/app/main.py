@@ -7,6 +7,7 @@ import contextlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import Literal
 
 import structlog
 from anthropic import AsyncAnthropic
@@ -52,14 +53,14 @@ from src.app.api.routes import (
 )
 from src.app.api.routes.webhook import router as webhook_router
 from src.app.api.routes.webhook import set_bot_and_dispatcher
-from src.app.config import get_settings
+from src.app.config import Settings, get_settings
 from src.app.core.exceptions import (
     EXCEPTION_STATUS_MAP,
     AppError,
     ErrorResponse,
     user_safe_error_message,
 )
-from src.app.core.llm import create_llm_provider
+from src.app.core.llm import AnthropicLLMProvider, create_llm_provider
 from src.app.core.logging import setup_logging
 from src.app.core.otel import setup_otel
 from src.app.core.preflight import run_startup_preflight
@@ -71,13 +72,14 @@ from src.app.persistence.database import (
     init_engine,
     init_session_factory,
 )
+from src.app.version import APP_VERSION
 
 logger = structlog.get_logger()
 
 
 @dataclass(slots=True)
 class _AppInitSettings:
-    app_env: str = "development"
+    app_env: Literal["development", "production", "test"] = "development"
     cors_allowed_origins: str = ""
     public_hostname: str = ""
 
@@ -90,14 +92,31 @@ def _get_app_init_settings() -> _AppInitSettings:
     """
     try:
         settings = get_settings()
+        app_env = settings.app_env
+        cors_allowed_origins = settings.cors_allowed_origins
+        public_hostname = settings.public_hostname
         return _AppInitSettings(
-            app_env=settings.app_env,
-            cors_allowed_origins=settings.cors_allowed_origins,
-            public_hostname=settings.public_hostname,
+            app_env=(
+                app_env if app_env in {"development", "production", "test"} else "development"
+            ),
+            cors_allowed_origins=(
+                cors_allowed_origins if isinstance(cors_allowed_origins, str) else ""
+            ),
+            public_hostname=public_hostname if isinstance(public_hostname, str) else "",
         )
     except Exception:
         logger.warning("app_init_settings_unavailable", exc_info=True)
         return _AppInitSettings()
+
+
+def _request_security_settings(settings: _AppInitSettings) -> Settings:
+    """Build a validated settings view without re-reading environment sources."""
+    return Settings.model_validate(
+        {
+            "app_env": settings.app_env,
+            "public_hostname": settings.public_hostname,
+        }
+    )
 
 
 def _get_request_id() -> str | None:
@@ -124,11 +143,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     telemetry = configure_telemetry(settings)
     app.state.telemetry = telemetry
 
-    # --- OpenTelemetry (Phase 3.1) ---
-    # No-op when OTEL_EXPORTER_OTLP_ENDPOINT is empty. When configured,
-    # auto-instruments FastAPI and wires an OTLP exporter with head
-    # sampling — the Collector does the tail sampling (see
-    # docs/OBSERVABILITY.md).
+    # OpenTelemetry stays off unless both OTEL_ENABLED and an OTLP endpoint are
+    # configured. When enabled, this process instruments FastAPI and applies
+    # head sampling. Any collector-side policy belongs to the operator.
     setup_otel(app, settings)
 
     # --- Database ---
@@ -145,7 +162,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.llm_provider = llm_provider
     # Temporary compatibility for call sites still named after the original
     # SDK. New code should depend on app.state.llm_provider.
-    app.state.anthropic_client = llm_provider.client if llm_provider.configured else llm_provider
+    app.state.anthropic_client = (
+        llm_provider.client if isinstance(llm_provider, AnthropicLLMProvider) else llm_provider
+    )
     logger.info(
         "llm_provider_initialized",
         provider=llm_provider.name,
@@ -246,7 +265,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Personal Execution OS",
-        version="0.1.0",
+        version=APP_VERSION,
         lifespan=lifespan,
         docs_url=None if is_production else "/docs",
         redoc_url=None if is_production else "/redoc",
@@ -333,7 +352,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         ExactHostMiddleware,
-        allowed_hosts=trusted_hosts(app_settings),
+        allowed_hosts=trusted_hosts(_request_security_settings(app_settings)),
     )
 
     # Routes
@@ -368,7 +387,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router, tags=["telegram"])
 
     # Expose the Idempotency-Key protected-route list on app.state so tests
-    # and the /docs/api.md generator can inspect it without reaching into
+    # and API documentation checks can inspect it without reaching into
     # module globals.
     register_idempotent_routes(app)
 

@@ -2,15 +2,15 @@
 
 ## What lives here
 
-`tests/integration/` exercises the full FastAPI app — routing, middleware,
-auth, route handlers, repositories — while mocking expensive or flaky
-externals (Anthropic, Redis, Telegram, etc.).
+`tests/integration/` exercises the full FastAPI app, including routing,
+middleware, auth, route handlers, and repositories. Expensive or unreliable
+external systems such as Anthropic, Redis, and Telegram are mocked.
 
 Two fixture families are available, defined in `conftest.py`:
 
 | Fixture | Scope | DB backing | When to use |
 | --- | --- | --- | --- |
-| `integration_client` | function | `AsyncMock` session | Contract tests that only care about request/response shapes. Fast, no Docker. Original pattern. |
+| `integration_client` | function | `AsyncMock` session | Request/response contract tests that do not depend on PostgreSQL behavior. |
 | `db_integration_client` | function | **Real Postgres + pgvector** (via testcontainers) | Tests that exercise SQL semantics: filtering, ordering, joins, aggregates, `tsvector`, `ltree`, vector distance, transactional side-effects. |
 
 New code that depends on non-trivial SQL **must** use the real-DB fixture.
@@ -20,7 +20,7 @@ Leave mocked-session tests alone unless you have a reason to migrate one
 ## Running integration tests
 
 Standard run (requires a local Docker daemon if any real-DB tests are
-selected — otherwise those tests `pytest.skip` cleanly):
+selected. Otherwise those tests call `pytest.skip` cleanly):
 
 ```bash
 uv run pytest tests/integration/ -x -v
@@ -42,8 +42,8 @@ uv run pytest tests/integration/ -k "not real_db" -x
 ## Requirements for the real-DB fixtures
 
 * **Docker, OrbStack, or Colima** with a reachable daemon.
-* First run pulls `pgvector/pgvector:pg16` (~400 MB) — subsequent runs are
-  fast (~3 s container boot + migrations).
+* The first run pulls `pgvector/pgvector:pg16` (about 400 MB). Later runs can
+  reuse the local image.
 * Python deps: `testcontainers[postgres]` and `psycopg[binary]` are pinned
   in `[dependency-groups].dev`.
 
@@ -109,7 +109,7 @@ async def db_integration_client(db_engine, mock_anthropic_client):
     # every request; yields (AsyncClient, AsyncSession)
 ```
 
-Example test (see `test_episodes_real_db.py` for the pilot):
+Example test (see `test_episodes_real_db.py`):
 
 ```python
 from src.app.persistence.models import Episode
@@ -128,32 +128,32 @@ async def test_list_episodes_returns_inserted_rows(db_integration_client):
 
 Key invariants:
 
-1. The container is **session-scoped** — one boot per `pytest` invocation.
+1. The container is **session-scoped**, so it boots once per `pytest`
+   invocation.
 2. Alembic runs migrations against the container exactly once, via a
    sync connection injected through `config.attributes["connection"]`
    in `src/app/persistence/migrations/env.py`.
 3. Each test opens a connection, begins a transaction, yields an
    `AsyncSession` bound to it, then **rolls the transaction back on
-   teardown** — tests never see each other's writes.
+   teardown**. Tests never see each other's writes.
 4. `get_db` is overridden to return the same session for every HTTP
    request in the test, so changes made in the test body are visible
    to the route code.
 
-## Migration backlog
+## Mock-backed coverage
 
-The pilot file `test_episodes_real_db.py` proves the pattern works.
-The following existing files still use the mocked `AsyncSession` and
-are candidates for migration to the real-DB fixture. Pick one per PR;
-migrate incrementally.
+`test_episodes_real_db.py` uses the real database fixture. The files below
+still use a mocked `AsyncSession`. Move a test to the real fixture when its
+behavior depends on PostgreSQL rather than the HTTP contract.
 
 | File | Priority | Notes |
 | --- | --- | --- |
 | `test_api_endpoints.py` | High | Largest file; covers episodes, goals, habits, notes CRUD. Ideal first real migration. |
-| `test_memory_contracts.py` | High | Entities / relationships — depends on `ltree` and `pg_trgm`, which mocks cannot reproduce. |
+| `test_memory_contracts.py` | High | Entities and relationships depend on `ltree` and `pg_trgm`, which mocks cannot reproduce. |
 | `test_dashboard_contracts.py` | Medium | Heavy aggregate SQL (mood averages, counts). Mocks here are fragile. |
 | `test_habits_contracts.py` | Medium | Streak logic. |
 | `test_projects_contracts.py` | Medium | WBS + WSJF ordering. |
-| `test_goals_contracts.py` | Medium | Self-referential `parent_id` — cascade behaviour worth testing live. |
+| `test_goals_contracts.py` | Medium | Self-referential `parent_id`; its cascade behaviour is worth testing live. |
 | `test_decisions_contracts.py` | Low | Mostly CRUD contracts; mocks acceptable for now. |
 | `test_calendar_contracts.py` | Low | Depends on Google OAuth mocks, not SQL. |
 | `test_commitments_contracts.py` | Low | CRUD. |
@@ -164,8 +164,8 @@ migrate incrementally.
 | `test_notifications_contracts.py` | Low | Depends on notification delivery, not SQL. |
 | `test_reviews_contracts.py` | Low | Depends on review generation logic. |
 | `test_tutorials_contracts.py` | Low | Static tutorial content. |
-| `test_chat_contracts.py` | Skip | Pure routing / response-shape — keep mocked. |
-| `test_chat_routing.py` | Skip | Tests router classifier behaviour — keep mocked. |
+| `test_chat_contracts.py` | Skip | Pure routing and response-shape tests; keep them mocked. |
+| `test_chat_routing.py` | Skip | Router classifier tests; keep them mocked. |
 | `test_smoke_api.py` | Skip | Smoke-CLI probe, not a SQL test. |
 
 ## Adding a new real-DB test
@@ -173,9 +173,9 @@ migrate incrementally.
 1. Import ORM models from `src.app.persistence.models`.
 2. Request `db_integration_client` in the test signature.
 3. `session.add(...)` + `await session.flush()` to seed data.
-4. Call `await client.get(...)` / `client.post(...)` — the route handler
+4. Call `await client.get(...)` / `client.post(...)`. The route handler
    will see your seeded rows via the shared transactional session.
-5. Do **not** call `session.commit()` — commits break the savepoint
+5. Do **not** call `session.commit()`. Commits break the savepoint
    rollback and leak state into subsequent tests.
 
 ## Running the HNSW migration on managed PostgreSQL
@@ -204,7 +204,7 @@ Before running the migration on a managed provider:
    ```
 
 4. Revert any temporary compute or configuration increase after the
-   migration. Runtime queries can use the ordinary memory setting once the
+   migration. Runtime queries can use the normal memory setting once the
    HNSW index exists.
 
 If you cannot grant the session enough memory, the safest alternative is

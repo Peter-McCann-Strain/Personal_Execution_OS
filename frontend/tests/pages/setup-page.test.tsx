@@ -177,4 +177,31 @@ describe("SetupPage", () => {
 
     expect(await screen.findByText("Email landing")).toBeInTheDocument();
   });
+
+  it("rejects whitespace-only credentials even when the form is submitted directly", async () => {
+    renderSetup();
+    fireEvent.change(screen.getByLabelText("API key"), {
+      target: { value: "   " },
+    });
+    const form = screen.getByRole("button", { name: "Save and continue" }).closest("form");
+
+    fireEvent.submit(form!);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Paste your API key first.");
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+  });
+
+  it("uses a safe generic validation error for non-Error failures", async () => {
+    mocks.apiGet.mockRejectedValueOnce({ provider_payload: "do not expose" });
+    renderSetup();
+
+    fireEvent.change(screen.getByLabelText("API key"), {
+      target: { value: "candidate-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Validation failed.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("do not expose");
+    expect(sessionStorage.getItem("api_key")).toBeNull();
+  });
 });

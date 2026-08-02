@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import AsyncIterable
 from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Final
@@ -406,12 +407,19 @@ async def _materialise_response_body(response: Response) -> bytes:
     and then hand a fresh ``Response`` back down the stack.
     """
     chunks: list[bytes] = []
-    if hasattr(response, "body_iterator"):
-        async for chunk in response.body_iterator:
+    body_iterator = getattr(response, "body_iterator", None)
+    if isinstance(body_iterator, AsyncIterable):
+        async for chunk in body_iterator:
             if isinstance(chunk, str):
                 chunks.append(chunk.encode("utf-8"))
-            else:
+            elif isinstance(chunk, bytes | bytearray | memoryview):
                 chunks.append(bytes(chunk))
+            else:
+                msg = (
+                    "response body iterator yielded an unsupported chunk type: "
+                    f"{type(chunk).__name__}"
+                )
+                raise TypeError(msg)
         return b"".join(chunks)
     # Plain Response already has a ``body`` attribute
     return bytes(response.body or b"")
@@ -480,7 +488,7 @@ def _session_factory():
 # prefix added by ``app.include_router``).
 #
 # Grouped for readability; the full list is exported via ``protected_routes()``
-# and rendered into ``docs/api.md`` so clients can discover it.
+# and described in ``docs/API.md`` so clients can discover the contract.
 # ---------------------------------------------------------------------------
 
 _INITIAL_PROTECTED_ROUTES: Final[tuple[tuple[str, str], ...]] = (
@@ -506,7 +514,6 @@ _INITIAL_PROTECTED_ROUTES: Final[tuple[tuple[str, str], ...]] = (
     ("POST", "/api/scheduled-actions/{action_id}/run"),
     ("POST", "/api/contacts"),
     ("POST", "/api/contacts/{contact_id}/interactions"),
-    ("POST", "/api/connectors/accounts"),
     ("POST", "/api/connectors/accounts/{account_id}/sync"),
     ("POST", "/api/reviews/generate"),
 )

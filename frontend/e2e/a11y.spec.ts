@@ -47,7 +47,13 @@ const MAIN_ROUTES = [
 const MOBILE_ROUTES = ["/welcome", "/dashboard", "/workbench", "/settings"] as const;
 
 async function expectNoViolations(page: import("@playwright/test").Page) {
-  let builder = new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]);
+  let builder = new AxeBuilder({ page }).withTags([
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa",
+  ]);
 
   if (GLOBAL_DISABLED_RULES.length > 0) {
     builder = builder.disableRules(GLOBAL_DISABLED_RULES);
@@ -60,14 +66,14 @@ async function expectNoViolations(page: import("@playwright/test").Page) {
   expect(results.violations).toEqual([]);
 }
 
-test.describe("WCAG 2.1 AA accessibility audit", () => {
+test.describe("WCAG 2.2 AA automated accessibility audit", () => {
   test.beforeEach(async ({ page }) => {
     await seedApiKey(page);
     await installCriticalPathMocks(page);
   });
 
   for (const route of MAIN_ROUTES) {
-    test(`has no WCAG 2.1 AA violations on ${route}`, async ({ page }) => {
+    test(`has no selected WCAG 2.2 AA axe violations on ${route}`, async ({ page }) => {
       await page.goto(route);
       // Let lazy routes settle before scanning.
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
@@ -77,8 +83,19 @@ test.describe("WCAG 2.1 AA accessibility audit", () => {
   }
 
   for (const route of MOBILE_ROUTES) {
-    test(`has no WCAG 2.1 AA violations on ${route} at a phone viewport`, async ({ page }) => {
+    test(`has no selected WCAG 2.2 AA axe violations on ${route} at a phone viewport`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(route);
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectNoViolations(page);
+    });
+  }
+
+  for (const route of MOBILE_ROUTES) {
+    test(`remains axe-clean on ${route} at 320 CSS pixels`, async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 700 });
       await page.goto(route);
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
       await expectNoViolations(page);

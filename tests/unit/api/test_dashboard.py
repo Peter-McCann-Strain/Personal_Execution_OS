@@ -14,6 +14,7 @@ from src.app.core.exceptions import (
     EXCEPTION_STATUS_MAP,
     AppError,
     ConnectorBackendError,
+    ConnectorError,
     ConnectorRateLimitedError,
     ConnectorTokenExpiredError,
     ConnectorUnknownError,
@@ -28,6 +29,23 @@ from tests.unit.api.auth_helpers import override_current_principal
 
 async def _mock_get_db():
     yield AsyncMock()
+
+
+def test_connector_failure_payload_normalizes_extension_category() -> None:
+    """An extension-defined category must remain inside the public response schema."""
+    from src.app.api.routes.dashboard import _connector_failure_payload
+
+    class VendorConnectorError(ConnectorError):
+        category = "vendor_outage"
+
+    payload = _connector_failure_payload(
+        connector="gmail",
+        exc=VendorConnectorError("provider maintenance"),
+    )
+
+    assert payload["category"] == "unknown"
+    assert payload["message"] == "provider maintenance"
+    assert payload["actionable"] is False
 
 
 def _build_app(*, override_auth: bool = True) -> FastAPI:

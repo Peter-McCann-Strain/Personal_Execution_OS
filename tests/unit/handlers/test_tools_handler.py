@@ -121,6 +121,46 @@ def test_set_and_get_mcp_client_manager_round_trip():
 
 
 @pytest.mark.asyncio
+async def test_execute_with_receipts_supports_legacy_manager_only_calls() -> None:
+    """A compatibility call without a DB session executes but skips receipts."""
+    plan = ToolInvocationPlan(
+        tool_id="tool-read",
+        server_name="filesystem",
+        tool_name="read_file",
+        public_name="filesystem__read_file",
+        arguments={"path": "/tmp/example"},
+        input_schema={"type": "object"},
+        argument_hash="hash-read",
+        idempotency_key="idem-read",
+        trust_context="trusted_user",
+        mutation_class="read_only",
+    )
+    executed = {
+        "type": "tool_result",
+        "tool_use_id": plan.tool_id,
+        "content": "done",
+        "is_error": False,
+    }
+
+    with patch.object(
+        tools_module,
+        "execute_tool_calls",
+        new=AsyncMock(return_value=[executed]),
+    ) as execute:
+        result = await tools_module._execute_with_receipts(
+            None,
+            manager=object(),
+            plans=[plan],
+            trace_id=None,
+            interaction_id=None,
+            confirmed_mutations=False,
+        )
+
+    assert result == [executed]
+    execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_handle_tools_requires_live_mcp_manager():
     """handle_tools should fail loudly when no live MCP manager is available."""
     with (

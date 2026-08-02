@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 
@@ -161,7 +162,7 @@ def _load_energy_blocks() -> tuple[EnergyBlock, ...]:
     return blocks
 
 
-def _find_identity_line(lines: list[str], label: str) -> str:
+def _find_identity_line(lines: Sequence[str], label: str) -> str:
     prefix = f"- {label}:"
     for line in lines:
         if line.startswith(prefix):

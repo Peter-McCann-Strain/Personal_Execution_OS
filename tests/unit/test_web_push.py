@@ -76,6 +76,35 @@ async def test_dispatch_web_push_marks_success() -> None:
     session.commit.assert_awaited_once()
 
 
+async def test_dispatch_web_push_skips_non_callable_library_adapter() -> None:
+    session = AsyncMock()
+    subscription = _subscription()
+
+    with (
+        patch("src.app.domain.services.web_push.get_settings", return_value=_settings()),
+        patch(
+            "src.app.domain.services.web_push.list_web_push_subscriptions",
+            new_callable=AsyncMock,
+            return_value=[subscription],
+        ),
+        patch("src.app.domain.services.web_push._load_webpush", return_value=(object(), None)),
+        patch(
+            "src.app.domain.services.web_push.mark_web_push_subscription_failure",
+            new_callable=AsyncMock,
+        ) as mark_failure,
+    ):
+        summary = await dispatch_web_push_to_user(
+            session,
+            user_id="owner",
+            payload={"title": "Pulse update"},
+        )
+
+    assert summary.attempted == 0
+    assert summary.skipped == 1
+    mark_failure.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
 async def test_dispatch_web_push_revokes_gone_subscription() -> None:
     session = AsyncMock()
     subscription = _subscription()

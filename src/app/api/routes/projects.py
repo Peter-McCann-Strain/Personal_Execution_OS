@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -72,9 +71,10 @@ def _list_of_strings(value: object) -> list[str]:
 
 
 def _iso_datetime_value(value: object) -> str | None:
-    if hasattr(value, "isoformat"):
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
         try:
-            iso_value = value.isoformat()
+            iso_value = isoformat()
         except TypeError:
             return None
         return iso_value if isinstance(iso_value, str) else None
@@ -353,12 +353,7 @@ async def _load_dependency_map(
     except Exception:
         return {}
     mapping: dict[uuid.UUID, list[uuid.UUID]] = {}
-    scalars = result.scalars()
-    scalar_container = await scalars if inspect.isawaitable(scalars) else scalars
-    if not hasattr(scalar_container, "all"):
-        return {}
-    scalar_result = scalar_container.all()
-    dependencies = await scalar_result if inspect.isawaitable(scalar_result) else scalar_result
+    dependencies = result.scalars().all()
     for dependency in dependencies:
         mapping.setdefault(dependency.task_id, []).append(dependency.depends_on_task_id)
     return mapping
@@ -578,8 +573,7 @@ async def update_task(
     session: AsyncSession = Depends(get_db),
 ) -> TaskDTO:
     """Update a task's fields including blockers and dependencies."""
-    existing_task = await session.get(Task, task_id)
-    if existing_task is None:
+    if await session.get(Task, task_id) is None:
         raise NotFoundError(f"Task not found: {task_id}")
 
     async with session_transaction(session):
@@ -614,25 +608,6 @@ async def update_task(
             )
         else:
             dependency_ids = []
-
-    if not isinstance(getattr(task, "id", None), uuid.UUID):
-        task = existing_task
-        if body.title is not None:
-            task.title = body.title
-        if body.description is not None:
-            task.description = body.description
-        if normalized_status is not None:
-            task.status = normalized_status
-        if body.estimate_hours is not None:
-            task.estimate_hours = body.estimate_hours
-        if body.actual_hours is not None:
-            task.actual_hours = body.actual_hours
-        if body.wsjf_score is not None:
-            task.wsjf_score = body.wsjf_score
-        if body.context_tags is not None:
-            task.context_tags = body.context_tags
-        if body.blocked_reason is not None:
-            task.blocked_reason = body.blocked_reason
 
     await session.refresh(task)
     logger.info("task_updated_via_api", task_id=str(task_id))

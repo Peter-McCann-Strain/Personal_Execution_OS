@@ -2,6 +2,8 @@
 
 import logging
 import sys
+from collections.abc import MutableMapping
+from typing import Any
 
 import structlog
 
@@ -24,7 +26,11 @@ _SENSITIVE_EXCEPTION_KEYS = frozenset(
 )
 
 
-def safe_exception_processor(_logger, _method_name: str, event_dict: dict) -> dict:
+def safe_exception_processor(
+    _logger: Any,
+    _method_name: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     """Remove exception messages and tracebacks before any external log sink."""
     exc_info = event_dict.pop("exc_info", None)
     if isinstance(exc_info, BaseException):
@@ -67,9 +73,9 @@ def setup_logging(log_level: str, app_env: str) -> None:
         # Fall through to safe defaults — redaction still on.
         pii_enabled = True
         overrides = []
-        allowlist = None  # type: ignore[assignment]
+        allowlist = parse_allowlist_keys(None)
 
-    pii_processor = build_pii_redact_processor(
+    pii_processor: structlog.types.Processor = build_pii_redact_processor(
         enabled=pii_enabled,
         override_patterns=overrides,
         allowlist_keys=allowlist,
@@ -111,14 +117,13 @@ def setup_logging(log_level: str, app_env: str) -> None:
     # PII redaction MUST run after all dict-mutating processors (e.g.
     # CallsiteParameterAdder, exception formatting) but BEFORE the
     # terminal renderer so the final JSON / console line is scrubbed.
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            safe_exception_processor,
-            pii_processor,
-            renderer,
-        ],
-    )
+    formatter_processors: list[structlog.types.Processor] = [
+        structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+        safe_exception_processor,
+        pii_processor,
+        renderer,
+    ]
+    formatter = structlog.stdlib.ProcessorFormatter(processors=formatter_processors)
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)

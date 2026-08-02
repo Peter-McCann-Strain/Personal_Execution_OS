@@ -58,7 +58,7 @@ async def test_plan_queries_node(mock_gen_queries):
 
     result = await plan_queries_node(state)
     assert result["queries"] == ["query 1", "query 2", "query 3"]
-    assert result["question"] == "What is quantum computing?"
+    assert result.model_fields_set == {"queries"}
     mock_gen_queries.assert_called_once_with("What is quantum computing?", mock_client)
 
 

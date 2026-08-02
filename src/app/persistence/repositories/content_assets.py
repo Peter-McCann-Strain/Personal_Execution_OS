@@ -284,15 +284,16 @@ async def generate_content_source_pack(
     project = await _get_live_project(session, asset.project_id) if asset.project_id else None
     task = await session.get(Task, asset.task_id) if asset.task_id else None
 
-    asset.source_pack = _build_source_pack(
+    source_pack = _build_source_pack(
         asset=asset,
         note=note,
         project=project,
         task=task,
     )
+    asset.source_pack = source_pack
     asset.metadata_ = {
         **(asset.metadata_ or {}),
-        "source_pack_generated_at": asset.source_pack.get("generated_at"),
+        "source_pack_generated_at": source_pack.get("generated_at"),
     }
     await session.flush()
     logger.info("content_asset_source_pack_generated", asset_id=str(asset_id))

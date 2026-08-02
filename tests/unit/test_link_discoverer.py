@@ -14,20 +14,11 @@ from src.app.second_brain.link_discoverer import (
 def _make_mock_session(rows: list[dict]) -> AsyncMock:
     """Build a mock AsyncSession that returns predefined query results."""
     session = AsyncMock()
-    # Build mock mappings result
     mock_result = MagicMock()
     mock_mappings = MagicMock()
-    mock_mappings.all.return_value = [MagicMock(**{k: v for k, v in row.items()}) for row in rows]
-    # Make each mapping dict-convertible by returning the row dicts directly
-    # dict(row) is called on each mapping, so we need __iter__ and keys
-    mapping_objects = []
-    for row in rows:
-        m = MagicMock()
-        m.keys.return_value = row.keys()
-        m.__iter__ = MagicMock(return_value=iter(row.keys()))
-        m.__getitem__ = MagicMock(side_effect=lambda k, r=row: r[k])
-        mapping_objects.append(m)
-    mock_mappings.all.return_value = mapping_objects
+    # SQLAlchemy ``RowMapping`` implements the Mapping protocol. Plain dicts
+    # are the truthful lightweight stand-in and keep malformed rows visible.
+    mock_mappings.all.return_value = rows
     mock_result.mappings.return_value = mock_mappings
     session.execute.return_value = mock_result
     return session

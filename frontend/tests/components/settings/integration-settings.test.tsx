@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent } from "@testing-library/react";
-import { renderWithProviders, screen, waitFor, within } from "../../test-utils";
+import { act, renderWithProviders, screen, waitFor, within } from "../../test-utils";
 import { IntegrationSettings } from "@/components/settings/integration-settings";
 
 const mocks = vi.hoisted(() => ({
   apiPost: vi.fn(),
-  createConnectorAccount: vi.fn(),
   deleteConnectorAccount: vi.fn(),
   getHealth: vi.fn(),
   listConnectorAccounts: vi.fn(),
@@ -29,7 +28,6 @@ vi.mock("@/api/monitoring", () => ({
 }));
 
 vi.mock("@/api/connectors", () => ({
-  createConnectorAccount: mocks.createConnectorAccount,
   deleteConnectorAccount: mocks.deleteConnectorAccount,
   listConnectorAccounts: mocks.listConnectorAccounts,
   listConnectorDocuments: mocks.listConnectorDocuments,
@@ -50,7 +48,7 @@ function makeHealthStatus() {
   return {
     status: "degraded",
     services: {
-      anthropic: { status: "ok", message: "Connected" },
+      llm: { status: "ok", message: "Connected" },
       ollama: { status: "down", message: "Local runtime unavailable" },
       gmail: { status: "unknown" },
       tavily: { status: "ok" },
@@ -61,7 +59,6 @@ function makeHealthStatus() {
 describe("IntegrationSettings", () => {
   beforeEach(() => {
     mocks.apiPost.mockReset();
-    mocks.createConnectorAccount.mockReset();
     mocks.deleteConnectorAccount.mockReset();
     mocks.getHealth.mockReset();
     mocks.listConnectorAccounts.mockReset();
@@ -192,8 +189,297 @@ describe("IntegrationSettings", () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
       "Gmail disconnected and local data deleted",
     );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("cannot dismiss disconnect confirmation while provider revocation is pending", async () => {
+    let resolveDisconnect!: () => void;
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([makeConnectedGmailAccount()]);
+    mocks.deleteConnectorAccount.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDisconnect = resolve;
+      }),
+    );
+
+    renderWithProviders(<IntegrationSettings />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Disconnect and delete local data" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Disconnect and permanently delete",
+      }),
+    );
+    await waitFor(() => expect(mocks.deleteConnectorAccount).toHaveBeenCalledOnce());
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveDisconnect();
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("starts Google OAuth and reports authorization-start failures", async () => {
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.startGoogleOAuth.mockRejectedValue(new Error("OAuth configuration missing"));
+
+    renderWithProviders(<IntegrationSettings />);
+    const connectButtons = await screen.findAllByRole("button", { name: "Connect" });
+    fireEvent.click(connectButtons[0]);
+
+    await waitFor(() => {
+      expect(mocks.startGoogleOAuth).toHaveBeenCalledWith("gmail");
+      expect(mocks.toastError).toHaveBeenCalledWith("Unable to update Gmail", {
+        description: "OAuth configuration missing",
+      });
+    });
+  });
+
+  it("updates connector permissions independently", async () => {
+    const account = makeConnectedGmailAccount();
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([account]);
+    mocks.updateConnectorAccount.mockResolvedValue(account);
+
+    renderWithProviders(<IntegrationSettings />);
+
+    await screen.findByRole("button", { name: "Pause sync" });
+    fireEvent.click(await screen.findByRole("button", { name: "Auto-use off" }));
+    await waitFor(() => {
+      expect(mocks.updateConnectorAccount).toHaveBeenCalledWith("gmail-account", {
+        auto_use: false,
+      });
+    });
+
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Background on" })
+        .find((button) => !button.hasAttribute("disabled"))!,
+    );
+    await waitFor(() => {
+      expect(mocks.updateConnectorAccount).toHaveBeenCalledWith("gmail-account", {
+        background_access: true,
+      });
+    });
+  });
+
+  it("resumes a paused connector and reports the resulting state", async () => {
+    const paused = makeConnectorAccount({ sync_enabled: false });
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([paused]);
+    mocks.updateConnectorAccount.mockResolvedValue({ ...paused, sync_enabled: true });
+
+    renderWithProviders(<IntegrationSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Resume sync" }));
+
+    await waitFor(() => {
+      expect(mocks.updateConnectorAccount).toHaveBeenCalledWith("gmail-account", {
+        sync_enabled: true,
+      });
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Gmail sync resumed");
+  });
+
+  it("reports a sync-pause failure without changing the destructive state", async () => {
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([makeConnectedGmailAccount()]);
+    mocks.updateConnectorAccount.mockRejectedValue(new Error("write unavailable"));
+
+    renderWithProviders(<IntegrationSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause sync" }));
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith("Unable to update Gmail sync", {
+        description: "write unavailable",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Disconnect and delete local data" })).toBeEnabled();
+  });
+
+  it("runs incremental and full syncs with honest success and failure feedback", async () => {
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([makeConnectedGmailAccount()]);
+    mocks.syncConnectorAccount
+      .mockResolvedValueOnce({
+        id: "sync-1",
+        account_id: "gmail-account",
+        sync_type: "incremental",
+        status: "completed",
+        document_count: 3,
+        error_message: null,
+      })
+      .mockResolvedValueOnce({
+        id: "sync-2",
+        account_id: "gmail-account",
+        sync_type: "full",
+        status: "failed",
+        document_count: 0,
+        error_message: null,
+      });
+
+    renderWithProviders(<IntegrationSettings />);
+    await screen.findByRole("button", { name: "Pause sync" });
+    const enabledSyncButton = screen
+      .getAllByRole("button", { name: "Sync now" })
+      .find((button) => !button.hasAttribute("disabled"));
+    expect(enabledSyncButton).toBeDefined();
+    fireEvent.click(enabledSyncButton!);
+
+    await waitFor(() => {
+      expect(mocks.syncConnectorAccount).toHaveBeenCalledWith("gmail-account", {
+        sync_type: "incremental",
+        max_items: 25,
+      });
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("Gmail synced", {
+        description: "3 documents indexed",
+      });
+    });
+
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Reindex" })
+        .find((button) => !button.hasAttribute("disabled"))!,
+    );
+    await waitFor(() => {
+      expect(mocks.syncConnectorAccount).toHaveBeenCalledWith("gmail-account", {
+        sync_type: "full",
+        max_items: 100,
+      });
+      expect(mocks.toastError).toHaveBeenCalledWith("Gmail sync failed", {
+        description: "Unknown error",
+      });
+    });
+  });
+
+  it("reports update and sync transport failures without changing connector labels", async () => {
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([makeConnectedGmailAccount()]);
+    mocks.updateConnectorAccount.mockRejectedValue("non-error update failure");
+    mocks.syncConnectorAccount.mockRejectedValue("non-error sync failure");
+
+    renderWithProviders(<IntegrationSettings />);
+    await screen.findByRole("button", { name: "Pause sync" });
+    fireEvent.click(await screen.findByRole("button", { name: "Auto-use off" }));
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith("Update failed");
+    });
+
+    const enabledSyncButton = screen
+      .getAllByRole("button", { name: "Sync now" })
+      .find((button) => !button.hasAttribute("disabled"));
+    expect(enabledSyncButton).toBeDefined();
+    fireEvent.click(enabledSyncButton!);
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith("Gmail sync failed", {
+        description: "Unknown error",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Pause sync" })).toBeInTheDocument();
+  });
+
+  it("renders indexed-document and latest-job evidence for a failed sync", async () => {
+    mocks.getHealth.mockResolvedValue({
+      status: "degraded",
+      services: {
+        llm: { status: "degraded", message: "Rate limited" },
+        ollama: { status: "lagging" },
+        posthog: { status: "unknown" },
+        sentry: { status: "down" },
+      },
+    });
+    mocks.listConnectorAccounts.mockResolvedValue([
+      makeConnectorAccount({ last_sync_at: "2026-08-01T10:00:00Z" }),
+    ]);
+    mocks.listConnectorDocuments.mockResolvedValue({
+      items: [
+        { id: "doc-1", account_id: "gmail-account" },
+        { id: "doc-2", account_id: "gmail-account" },
+      ],
+      total: 2,
+    });
+    mocks.listConnectorSyncJobs.mockResolvedValue([
+      {
+        id: "job-1",
+        account_id: "gmail-account",
+        sync_type: "full",
+        status: "failed",
+        error_message: "Provider quota exhausted",
+      },
+    ]);
+
+    renderWithProviders(<IntegrationSettings />);
+
+    expect(await screen.findByText("2 docs")).toBeInTheDocument();
+    expect(screen.getByText("full failed")).toBeInTheDocument();
+    expect(screen.getByText("Provider quota exhausted")).toBeInTheDocument();
+    expect(screen.getByText("Rate limited")).toBeInTheDocument();
+  });
+
+  it("renders completed and in-progress latest-job states", async () => {
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.listConnectorAccounts.mockResolvedValue([
+      makeConnectedGmailAccount(),
+      makeConnectorAccount({
+        id: "calendar-account",
+        connector_type: "google_calendar",
+        display_name: "Google Calendar",
+      }),
+    ]);
+    mocks.listConnectorSyncJobs.mockResolvedValue([
+      {
+        id: "job-1",
+        account_id: "gmail-account",
+        sync_type: "incremental",
+        status: "completed",
+        error_message: null,
+      },
+      {
+        id: "job-2",
+        account_id: "calendar-account",
+        sync_type: "full",
+        status: "running",
+        error_message: null,
+      },
+    ]);
+
+    renderWithProviders(<IntegrationSettings />);
+
+    expect(await screen.findByText("incremental completed")).toBeInTheDocument();
+    expect(screen.getByText("full running")).toBeInTheDocument();
+  });
+
+  it("uses safe service-test feedback for non-Error failures", async () => {
+    mocks.getHealth.mockResolvedValue(makeHealthStatus());
+    mocks.apiPost.mockRejectedValue({ provider_payload: "do not expose" });
+
+    renderWithProviders(<IntegrationSettings />);
+    const buttons = await screen.findAllByRole("button", { name: "Test Connection" });
+    await waitFor(() => expect(buttons[0]).toBeEnabled());
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith("Anthropic connection failed", {
+        description: "Unknown error",
+      });
+    });
   });
 });
+
+function makeConnectorAccount(overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeConnectedGmailAccount(),
+    ...overrides,
+  };
+}
 
 function makeConnectedGmailAccount() {
   return {

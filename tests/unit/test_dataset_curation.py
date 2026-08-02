@@ -158,6 +158,32 @@ class TestClusterMinSize:
         labels = dataset_curation._cluster(vectors, min_size=3)
         assert len(set(labels)) >= 2
 
+    def test_rejects_fitted_kmeans_without_labels(self):
+        """A malformed optional-dependency result must fail with a clear boundary error."""
+        kmeans = MagicMock()
+        kmeans.labels_ = None
+        vectors = [[float(i), float(i + 1)] for i in range(6)]
+
+        with (
+            patch("sklearn.cluster.KMeans", return_value=kmeans),
+            pytest.raises(RuntimeError, match="without assigning cluster labels"),
+        ):
+            dataset_curation._cluster(vectors, min_size=3)
+
+        kmeans.fit.assert_called_once_with(vectors)
+
+
+def test_final_score_rejects_partially_scored_record():
+    """A partially persisted judge result must remain unscored, not crash arithmetic."""
+    record = SimpleNamespace(
+        score_relevance=0.9,
+        score_actionability=None,
+        score_tone=0.8,
+        score_conciseness=0.7,
+    )
+
+    assert dataset_curation._final_score(record) is None
+
 
 # ---------- proposal JSONL writing ----------
 

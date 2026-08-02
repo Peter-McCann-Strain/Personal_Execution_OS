@@ -1,7 +1,7 @@
 """CLI tool for generating per-agent quality summary reports.
 
-Produces a readable markdown report with score distributions, trends,
-and per-dimension analysis for Claude Code to review.
+Produces a readable Markdown report with score distributions, trends,
+and per-dimension analysis for a human reviewer.
 
 Usage:
     # 30-day quality report for diary agent
@@ -107,7 +107,7 @@ async def _generate_report(args: argparse.Namespace) -> None:
         )
         optimizer_count = (await session.execute(optimizer_stmt)).scalar() or 0
 
-        # Worst interactions (for Claude Code attention)
+        # Worst interactions for review
         worst_stmt = (
             select(InteractionRecord)
             .where(*base_conditions)

@@ -242,6 +242,58 @@ class TestGetAvgScoresInWindow:
         assert result["count"] == 0
         assert result["relevance"] is None
 
+    @pytest.mark.asyncio
+    async def test_uses_row_mapping_when_count_label_collides_with_tuple_method(self):
+        """A labelled SQL count must not resolve to ``tuple.count``."""
+        session = AsyncMock()
+        mock_row = MagicMock()
+        mock_row.count = tuple.count
+        mock_row._mapping = {
+            "relevance": 0.85,
+            "actionability": 0.70,
+            "tone": 0.90,
+            "conciseness": 0.80,
+            "count": 6,
+        }
+        mock_result = MagicMock()
+        mock_result.one.return_value = mock_row
+        session.execute.return_value = mock_result
+
+        from src.app.persistence.repositories.interactions import get_avg_scores_in_window
+
+        result = await get_avg_scores_in_window(
+            session,
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+
+        assert result["count"] == 6
+        assert result["relevance"] == 0.85
+
+    @pytest.mark.asyncio
+    async def test_rejects_malformed_aggregate_count(self):
+        session = AsyncMock()
+        mock_row = MagicMock()
+        mock_row._mapping = {
+            "relevance": None,
+            "actionability": None,
+            "tone": None,
+            "conciseness": None,
+            "count": "six",
+        }
+        mock_result = MagicMock()
+        mock_result.one.return_value = mock_row
+        session.execute.return_value = mock_result
+
+        from src.app.persistence.repositories.interactions import get_avg_scores_in_window
+
+        with pytest.raises(TypeError, match="non-integer"):
+            await get_avg_scores_in_window(
+                session,
+                start=datetime(2026, 1, 1, tzinfo=UTC),
+                end=datetime(2026, 1, 2, tzinfo=UTC),
+            )
+
 
 class TestGetSpecialistScoreAverages:
     @pytest.mark.asyncio

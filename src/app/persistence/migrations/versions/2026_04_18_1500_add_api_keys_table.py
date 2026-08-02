@@ -8,9 +8,9 @@ successor + revoke the predecessor.
 Design notes
 ------------
 
-* Only the sha256 hash of the raw key is stored. The raw value is printed
-  to stdout exactly once at creation time by ``scripts/rotate_api_key.py``
-  and never persisted.
+* Only the sha256 hash of the raw key is stored. This was inherited from a
+  hosted-product rotation design; the public release does not ship its former
+  key-rotation CLI and uses the environment bootstrap path.
 * ``status`` is a CHECK-constrained enum-in-text. Using text (not a PG
   ENUM type) keeps migrations cheap — adding a fourth state later is an
   idempotent CHECK swap rather than an ``ALTER TYPE ADD VALUE``.

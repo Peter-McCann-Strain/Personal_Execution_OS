@@ -40,6 +40,18 @@ def _make_note():
 
 
 class TestHandleSave:
+    async def test_missing_url_match_returns_retry_boundary_response(self):
+        """A corrupted persisted retry must not dereference a missing regex match."""
+        from src.app.domain.services.handlers.save import _handle_url_save
+
+        result = await _handle_url_save(
+            client=AsyncMock(),
+            session=AsyncMock(),
+            url_match=None,
+        )
+
+        assert result.metadata["error"] == "missing_url"
+
     async def test_missing_save_target_requests_clarification(self):
         """Message without a URL or explicit note command should clarify."""
         message = _make_message("can you remember this for me")

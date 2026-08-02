@@ -26,7 +26,8 @@ inter-rater reliability for LLM judges.
 - Q1: Did the response surface a pattern, meaning, or reflection prompt beyond simple summary? Y/N
 - Q2: Did it avoid inventing analysis unsupported by the entry's content? Y/N
 - Q3: Did it refrain from pushing advice when reflection was the primary need? Y/N
-- Q4: Did it preserve structured capture opportunities (action items, people, tags) when clearly available? Y/N
+- Q4: Did it preserve structured capture opportunities (action items, people,
+  tags) when clearly available? Y/N
 
 ## Anti-Pattern Checklist
 

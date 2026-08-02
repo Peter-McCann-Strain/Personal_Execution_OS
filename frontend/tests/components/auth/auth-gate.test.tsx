@@ -124,4 +124,80 @@ describe("AuthGate server session", () => {
     });
     expect(await screen.findByText("Protected settings")).toBeInTheDocument();
   });
+
+  it.each([new ApiError(403, "forbidden"), new TypeError("session service offline")])(
+    "does not misclassify non-401 session failures as signed-out",
+    async (failure) => {
+      mocks.getCurrentSession.mockRejectedValue(failure);
+
+      renderGate();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not verify your session");
+      expect(screen.queryByText(/login\?returnTo/)).not.toBeInTheDocument();
+    },
+  );
+
+  it("does not reveal or redirect protected content after an in-flight gate unmounts", async () => {
+    let resolveSetup!: (value: unknown) => void;
+    mocks.getSetupStatus.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSetup = resolve;
+      }),
+    );
+
+    const view = renderGate();
+    expect(screen.getByLabelText("Checking session")).toBeInTheDocument();
+    view.unmount();
+    resolveSetup({ initialized: false, auth_mode: "local_owner" });
+
+    await Promise.resolve();
+    expect(mocks.getCurrentSession).not.toHaveBeenCalled();
+  });
+
+  it.each(["resolve", "reject"])(
+    "ignores a session check that settles after unmount (%s)",
+    async (outcome) => {
+      let resolveSession!: (value: unknown) => void;
+      let rejectSession!: (reason: unknown) => void;
+      mocks.getCurrentSession.mockReturnValue(
+        new Promise((resolve, reject) => {
+          resolveSession = resolve;
+          rejectSession = reject;
+        }),
+      );
+
+      const view = renderGate();
+      await waitFor(() => expect(mocks.getCurrentSession).toHaveBeenCalledOnce());
+      view.unmount();
+      if (outcome === "resolve") {
+        resolveSession({
+          authenticated: true,
+          subject: "owner",
+          role: "owner",
+          expires_at: null,
+        });
+      } else {
+        rejectSession(new Error("late failure"));
+      }
+
+      await Promise.resolve();
+      expect(screen.queryByText("Protected settings")).not.toBeInTheDocument();
+    },
+  );
+
+  it("ignores a setup-status failure that arrives after unmount", async () => {
+    let rejectSetup!: (reason: unknown) => void;
+    mocks.getSetupStatus.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectSetup = reject;
+      }),
+    );
+
+    const view = renderGate();
+    view.unmount();
+    rejectSetup(new Error("late setup failure"));
+
+    await Promise.resolve();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

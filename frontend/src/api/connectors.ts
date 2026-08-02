@@ -7,28 +7,11 @@ import type {
   PaginatedResponse,
 } from "@/types";
 
-export interface CreateConnectorAccountData {
-  connector_type: string;
-  display_name?: string;
-  scopes?: string[];
-  auto_use?: boolean;
-  background_access?: boolean;
-  sync_enabled?: boolean;
-  refresh_token?: string;
-  oauth_subject?: string;
-  oauth_email?: string;
-}
-
 export interface UpdateConnectorAccountData {
   display_name?: string;
-  scopes?: string[];
   auto_use?: boolean;
   background_access?: boolean;
   sync_enabled?: boolean;
-  status?: string;
-  refresh_token?: string;
-  oauth_subject?: string;
-  oauth_email?: string;
 }
 
 export interface SyncConnectorData {
@@ -56,12 +39,6 @@ export function listConnectorAccounts(): Promise<ConnectorAccount[]> {
 export function startGoogleOAuth(connectorType: string): Promise<StartGoogleOAuthResponse> {
   const path = `${apiPath(API_PATHS.apiConnectorsOauthGoogleStart)}?connector_type=${encodeURIComponent(connectorType)}`;
   return api.post<StartGoogleOAuthResponse>(path, undefined);
-}
-
-export function createConnectorAccount(
-  data: CreateConnectorAccountData,
-): Promise<ConnectorAccount> {
-  return api.post<ConnectorAccount>(apiPath(API_PATHS.apiConnectorsAccounts), data);
 }
 
 export function updateConnectorAccount(

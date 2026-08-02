@@ -110,7 +110,7 @@ class TestCreateApp:
 
             app = create_app()
         assert app.title == "Personal Execution OS"
-        assert app.version == "0.1.0"
+        assert app.version == "0.1.1"
 
     def test_docs_enabled_in_non_production(self):
         """Docs URLs should be available in non-production envs."""

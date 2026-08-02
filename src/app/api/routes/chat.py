@@ -345,7 +345,7 @@ async def inspect_chat_context(
 
     if message.user_id:
         try:
-            persisted_artifacts = list(
+            persisted_artifacts: list[object] = list(
                 await list_recent_artifacts_for_user(
                     session,
                     user_id=message.user_id,

@@ -11,6 +11,7 @@ import structlog
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.core.async_utils import affected_rows
 from src.app.core.exceptions import NotFoundError
 from src.app.domain.constants import EpisodeType
 from src.app.persistence.models import Episode
@@ -148,7 +149,7 @@ async def delete_episode(
     """Delete an episode by ID. Returns True if deleted, False if not found."""
     stmt = delete(Episode).where(Episode.id == episode_id)
     result = await session.execute(stmt)
-    deleted = result.rowcount > 0
+    deleted = affected_rows(result) > 0
     if deleted:
         logger.info("episode_deleted", episode_id=str(episode_id))
     return deleted

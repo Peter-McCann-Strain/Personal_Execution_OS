@@ -65,4 +65,48 @@ describe("StatCard", () => {
     expect(screen.getByText("active")).toBeInTheDocument();
     expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
   });
+
+  it("renders an actionable reconnect path for an expired connector token", () => {
+    renderWithProviders(
+      <StatCard
+        value={null}
+        label="Inbox"
+        trend={null}
+        sparkline={[]}
+        agentColor="communications"
+        status="unavailable"
+        errorCategory="token_expired"
+        actionable
+        actionUrl="/settings?tab=integrations"
+        errorMessage="Reconnect Gmail to continue."
+      />,
+    );
+
+    expect(screen.getByTestId("stat-card-error")).toHaveAttribute("data-category", "token_expired");
+    expect(screen.getByText("Reconnect Gmail to continue.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Reconnect" })).toHaveAttribute(
+      "href",
+      "/settings?tab=integrations",
+    );
+  });
+
+  it("uses the empty-state message for a non-actionable connector failure", () => {
+    renderWithProviders(
+      <StatCard
+        value={null}
+        label="Calendar"
+        trend={4}
+        sparkline={[]}
+        agentColor="tools"
+        status="unavailable"
+        errorCategory="backend_error"
+        actionable={false}
+        emptyText="Calendar is currently unavailable"
+      />,
+    );
+
+    expect(screen.getByText("Calendar is currently unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Reconnect" })).not.toBeInTheDocument();
+    expect(screen.getByText("+4")).toBeInTheDocument();
+  });
 });

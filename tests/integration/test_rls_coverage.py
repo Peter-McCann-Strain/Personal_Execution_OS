@@ -4,9 +4,9 @@ Boots a ``pgvector/pgvector:pg16`` container (via testcontainers), runs
 ``alembic upgrade head``, then asserts account tables have both RLS enabled
 and the account-isolation policy installed.
 
-This test is the counterpart to the deploy-gate step wired into
-``.github/workflows/deploy-release.yml`` and the ``--check`` mode of
-``scripts/enable_rls.py``.
+This test exercises the same required-table contract as the ``--check`` mode
+of ``scripts/enable_rls.py``. CI runs the integration suite; this repository
+does not contain a deployment workflow.
 
 Gracefully skips when Docker is unreachable so the rest of the suite
 stays fast on laptops without a local daemon.
@@ -96,11 +96,11 @@ def _alembic_config(async_url: str):
 
 
 @pytest.mark.skipif(not DOCKER_REACHABLE, reason=_SKIP_REASON)
-def test_every_public_table_has_rls_enabled(pg_container) -> None:
+def test_every_required_account_scoped_table_has_rls_enabled(pg_container) -> None:
     """After ``alembic upgrade head``, every account table is protected.
 
-    This test is authoritative — the same query is shipped to production
-    via ``scripts/enable_rls.py --check`` and run on every deploy.
+    The same query is available to operators through
+    ``scripts/enable_rls.py --check``.
     """
     from alembic import command
     from sqlalchemy import create_engine, text
@@ -145,8 +145,10 @@ def test_every_public_table_has_rls_enabled(pg_container) -> None:
 
 @pytest.mark.skipif(not DOCKER_REACHABLE, reason=_SKIP_REASON)
 def test_enable_rls_check_mode_exits_nonzero_when_gaps_exist(pg_container) -> None:
-    """``enable_rls.py --check`` must exit non-zero when any public table
-    is missing RLS, and zero when every table is protected.
+    """``enable_rls.py --check`` fails when a required account table lacks RLS.
+
+    It exits zero when all tables in the required account-scoped contract are
+    protected.
     """
     import subprocess
 
