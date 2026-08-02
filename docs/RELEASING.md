@@ -92,15 +92,23 @@ Compose project name. This prevents the test from reusing or deleting local
 application volumes.
 
 ```sh
-release_commit=$(git rev-parse HEAD)
-short_revision=$(git rev-parse --short=12 "$release_commit")
-release_tmp=$(mktemp -d "${TMPDIR:-/tmp}/peos-release.XXXXXX")
-git archive "$release_commit" | tar -x -C "$release_tmp"
+release_root=$(git rev-parse --show-toplevel)
+release_commit=$(git -C "$release_root" rev-parse HEAD)
+short_revision=$(git -C "$release_root" rev-parse --short=12 "$release_commit")
+release_parent=$(dirname -- "$release_root")
+release_tmp=$(mktemp -d "$release_parent/peos-release.XXXXXX")
+git -C "$release_root" archive "$release_commit" | tar -x -C "$release_tmp"
 cd "$release_tmp"
 export COMPOSE_PROJECT_NAME="peos-release-$short_revision"
 export SOURCE_REVISION="$release_commit"
 ./scripts/start.sh
 ```
+
+Keep the rehearsal under a directory Docker Desktop already shares. On macOS,
+an individual bind-mounted file from `/tmp` can appear as a directory inside
+the container, which prevents PostgreSQL from running its initialization
+script. A sibling of the checkout normally sits under the shared `/Users`
+tree and avoids that Docker Desktop behavior.
 
 Exercise first-run setup with fictional credentials, check `/readyz`, create
 and retrieve a fictional record, make and restore both supported recovery
@@ -111,8 +119,8 @@ do not treat a database-only restore as the release drill. Inspect both
 application images:
 
 ```sh
-docker image inspect personal-execution-os-api:latest
-docker image inspect personal-execution-os-web:latest
+docker image inspect "$(docker compose images -q api)"
+docker image inspect "$(docker compose images -q web)"
 ```
 
 Confirm the OCI version, source, revision, and licence labels match the release

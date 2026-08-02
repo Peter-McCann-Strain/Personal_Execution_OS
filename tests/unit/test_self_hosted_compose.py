@@ -36,11 +36,16 @@ def test_root_compose_has_hardened_core_services() -> None:
     assert "${POSTGRES_MIGRATOR_PASSWORD:?Run ./scripts/start.sh first}" in content
     assert "assistant_runtime" in content
     assert "assistant_migrator" in content
+    assert "pg_isready -h 127.0.0.1 -U assistant_admin -d personal_execution_os" in content
     assert "local-only-change-me" not in content
     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in content
     assert "AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-}" in content
     assert "VITE_SOURCE_REPOSITORY_URL: ${VITE_SOURCE_REPOSITORY_URL:-}" in content
-    assert content.count("./config/IDENTITY.local.md:/app/config/IDENTITY.local.md:ro") == 2
+    assert content.count("source: ./config/IDENTITY.local.md") == 2
+    assert content.count("target: /app/config/IDENTITY.local.md") == 2
+    assert "source: ./docker/postgres-init.sh" in content
+    assert "target: /docker-entrypoint-initdb.d/10-runtime-roles.sh" in content
+    assert content.count("create_host_path: false") == 3
     web_block = content.split("  web:", maxsplit=1)[1]
     assert "env_file:" not in web_block
     assert "worker-egress" in content

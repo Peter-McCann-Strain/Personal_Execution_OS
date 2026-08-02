@@ -58,10 +58,18 @@ services:
       POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/start.sh first}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./docker/postgres-init.sh:/docker-entrypoint-initdb.d/10-runtime-roles.sh:ro
+      - type: bind
+        source: ./docker/postgres-init.sh
+        target: /docker-entrypoint-initdb.d/10-runtime-roles.sh
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test:
-        ["CMD-SHELL", "pg_isready -U assistant_admin -d personal_execution_os"]
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U assistant_admin -d personal_execution_os",
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -140,7 +148,12 @@ services:
     environment: *backend-environment
     volumes:
       - app-data:/var/lib/personal-execution-os
-      - ./config/IDENTITY.local.md:/app/config/IDENTITY.local.md:ro
+      - type: bind
+        source: ./config/IDENTITY.local.md
+        target: /app/config/IDENTITY.local.md
+        read_only: true
+        bind:
+          create_host_path: false
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
@@ -185,7 +198,12 @@ services:
     environment: *backend-environment
     volumes:
       - app-data:/var/lib/personal-execution-os
-      - ./config/IDENTITY.local.md:/app/config/IDENTITY.local.md:ro
+      - type: bind
+        source: ./config/IDENTITY.local.md
+        target: /app/config/IDENTITY.local.md
+        read_only: true
+        bind:
+          create_host_path: false
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
