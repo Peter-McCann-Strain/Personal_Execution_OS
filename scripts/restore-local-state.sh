@@ -113,6 +113,7 @@ peos_create_verification_volume() {
 peos_create_verification_volume
 if ! docker run \
     --rm \
+    --interactive \
     --network none \
     --read-only \
     --user 0 \

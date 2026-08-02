@@ -279,6 +279,7 @@ peos_replace_volume_from_tar() (
     app_data_tar=$1
     docker run \
         --rm \
+        --interactive \
         --network none \
         --read-only \
         --user 0 \

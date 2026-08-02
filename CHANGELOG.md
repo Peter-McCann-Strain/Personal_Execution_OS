@@ -56,6 +56,9 @@ releases.
 - Applied the morning-briefing UTC fallback consistently to daily planning.
 - Hardened malformed runtime-data boundaries found by static analysis and
   adversarial tests, and made a zero-diagnostic type check mandatory in CI.
+- Kept Docker stdin attached while restoring local-state archives so the
+  application-data payload reaches the verification and replacement
+  containers.
 
 ## 0.1.0 - 2026-07-31
 

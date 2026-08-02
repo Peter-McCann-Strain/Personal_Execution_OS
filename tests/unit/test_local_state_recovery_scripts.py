@@ -107,7 +107,7 @@ case "$command_name" in
         entrypoint=""
         while [ "$#" -gt 0 ]; do
             case "$1" in
-                --rm | --read-only)
+                --rm | --interactive | --read-only)
                     shift
                     ;;
                 --network | --user | --volume | --entrypoint)
@@ -382,6 +382,8 @@ def test_restore_replaces_all_supported_state_and_preserves_private_permissions(
     assert not (app_data / "stale.txt").exists()
     assert (app_data / "evaluation" / "exports" / "result.json").exists()
     assert list((project / "backups").glob("pre-local-state-restore-*.tar.gz"))
+    docker_log = Path(env["FAKE_DOCKER_LOG"]).read_text(encoding="utf-8").splitlines()
+    assert sum(line.startswith("run --rm --interactive") for line in docker_log) == 2
 
 
 def test_restore_requires_confirmation_and_stopped_services(tmp_path: Path) -> None:
