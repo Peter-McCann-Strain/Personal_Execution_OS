@@ -49,7 +49,7 @@ describe("server owner setup", () => {
 
     await user.type(await screen.findByLabelText("Owner password"), "a unique long password");
     await user.type(screen.getByLabelText("Confirm password"), "a unique long password");
-    await user.click(screen.getByRole("button", { name: "Create owner and continue" }));
+    await user.click(await screen.findByRole("button", { name: "Create owner and continue" }));
 
     await waitFor(() => {
       expect(mocks.initializeOwner).toHaveBeenCalledWith("a unique long password");
@@ -104,7 +104,9 @@ describe("server owner setup", () => {
 
     const password = await screen.findByLabelText("Owner password");
     const confirmation = screen.getByLabelText("Confirm password");
-    const form = screen.getByRole("button", { name: "Create owner and continue" }).closest("form");
+    const form = (await screen.findByRole("button", { name: "Create owner and continue" })).closest(
+      "form",
+    );
     expect(form).not.toBeNull();
 
     await user.type(password, "too short");
@@ -167,7 +169,7 @@ describe("server owner setup", () => {
 
     await user.type(await screen.findByLabelText("Owner password"), "a unique long password");
     await user.type(screen.getByLabelText("Confirm password"), "a unique long password");
-    await user.click(screen.getByRole("button", { name: "Create owner and continue" }));
+    await user.click(await screen.findByRole("button", { name: "Create owner and continue" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByRole("heading", { name: "Create the owner account" })).toBeInTheDocument();
