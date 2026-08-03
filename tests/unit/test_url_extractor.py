@@ -114,6 +114,29 @@ class TestExtractUrlContent:
 
         assert result.title == "https://example.com/no-title"
 
+    async def test_discards_script_with_whitespace_before_end_tag(self):
+        html = "<title>Safe</title><p>Keep this</p><script>discard me</script >"
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                content=html,
+            )
+
+        with (
+            patch(
+                "src.app.core.url_extractor.socket.getaddrinfo",
+                return_value=_dns_answers(_PUBLIC_IP),
+            ),
+            _client_patch(handler),
+        ):
+            result = await extract_url_content("https://example.com/article")
+
+        assert result.title == "Safe"
+        assert "Keep this" in result.text
+        assert "discard me" not in result.text
+
     async def test_public_redirect_to_loopback_is_blocked_before_second_request(self):
         requests: list[httpx.Request] = []
 

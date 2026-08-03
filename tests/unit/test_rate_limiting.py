@@ -5,8 +5,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
-from src.app.api.rate_limiting import RedisSlidingWindowCounter, SlidingWindowCounter
+from src.app.api.rate_limiting import (
+    RateLimitMiddleware,
+    RedisSlidingWindowCounter,
+    SlidingWindowCounter,
+    _counter,
+)
 
 # ---------------------------------------------------------------------------
 # SlidingWindowCounter unit tests
@@ -142,6 +149,43 @@ def test_single_request_limit():
     counter = SlidingWindowCounter()
     assert counter.is_allowed("key", limit=1, window_seconds=60.0) is True
     assert counter.is_allowed("key", limit=1, window_seconds=60.0) is False
+
+
+@pytest.mark.asyncio
+async def test_api_key_requests_use_safe_valid_and_invalid_buckets():
+    """Rate-limit keys must neither expose credentials nor reward key rotation."""
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.get("/test")
+    async def test_endpoint():
+        return {"ok": True}
+
+    settings = SimpleNamespace(
+        app_env="test",
+        chat_api_key=SimpleNamespace(get_secret_value=lambda: "configured-secret"),
+        rate_limit_api_rpm=60,
+        rate_limit_api_window=60.0,
+        rate_limit_telegram_rpm=30,
+        rate_limit_telegram_window=60.0,
+    )
+    with (
+        patch("src.app.config.get_settings", return_value=settings),
+        patch.object(_counter, "is_allowed", return_value=True) as is_allowed,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app, client=("192.0.2.10", 1234)),
+            base_url="http://test",
+        ) as client:
+            valid = await client.get("/test", headers={"X-API-Key": "configured-secret"})
+            invalid = await client.get("/test", headers={"X-API-Key": "wrong-secret"})
+
+    assert valid.status_code == 200
+    assert invalid.status_code == 200
+    assert is_allowed.call_args_list[0].args[0] == "api:authenticated"
+    assert is_allowed.call_args_list[1].args[0] == "api-invalid:192.0.2.10"
+    assert "configured-secret" not in repr(is_allowed.call_args_list)
+    assert "wrong-secret" not in repr(is_allowed.call_args_list)
 
 
 # ---------------------------------------------------------------------------

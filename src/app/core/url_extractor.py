@@ -6,6 +6,7 @@ import ipaddress
 import re
 import socket
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from urllib.parse import SplitResult, urljoin, urlsplit, urlunsplit
 
 import httpx
@@ -14,10 +15,6 @@ from pydantic import BaseModel
 
 logger = structlog.get_logger()
 
-_RE_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.DOTALL | re.IGNORECASE)
-_RE_SCRIPT = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
-_RE_STYLE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
-_RE_TAGS = re.compile(r"<[^>]+>")
 _RE_WHITESPACE = re.compile(r"\s+")
 
 _ALLOWED_CONTENT_TYPES = frozenset(
@@ -33,6 +30,50 @@ _MAX_RESPONSE_BYTES = 1_000_000
 _MAX_REDIRECTS = 5
 _MAX_URL_LENGTH = 2_048
 _USER_AGENT = "PersonalExecutionOS/1.0"
+
+
+class _ReadableHTMLParser(HTMLParser):
+    """Collect readable text while discarding executable and style content."""
+
+    _IGNORED_ELEMENTS = frozenset({"script", "style"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._ignored_depth = 0
+        self._in_title = False
+        self.text_parts: list[str] = []
+        self.title_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag in self._IGNORED_ELEMENTS:
+            self._ignored_depth += 1
+            return
+        if self._ignored_depth == 0 and tag == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._IGNORED_ELEMENTS and self._ignored_depth:
+            self._ignored_depth -= 1
+            return
+        if self._ignored_depth == 0 and tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
+        self.text_parts.append(data)
+        if self._in_title:
+            self.title_parts.append(data)
+
+
+def _extract_readable_html(html: str) -> tuple[str, str]:
+    parser = _ReadableHTMLParser()
+    parser.feed(html)
+    parser.close()
+    title = _RE_WHITESPACE.sub(" ", " ".join(parser.title_parts)).strip()
+    text = _RE_WHITESPACE.sub(" ", " ".join(parser.text_parts)).strip()
+    return title, text
 
 
 @dataclass(frozen=True)
@@ -241,14 +282,9 @@ async def extract_url_content(url: str) -> ExtractedContent:
     else:  # pragma: no cover - the bounded loop always exits or raises
         raise ValueError("URL exceeded the redirect limit")
 
-    title_match = _RE_TITLE.search(html)
-    title = title_match.group(1).strip() if title_match else current_url
-
-    clean = _RE_SCRIPT.sub("", html)
-    clean = _RE_STYLE.sub("", clean)
-    clean = _RE_TAGS.sub(" ", clean)
-    clean = _RE_WHITESPACE.sub(" ", clean).strip()
-    text = clean[:_MAX_EXTRACTION_LENGTH]
+    extracted_title, extracted_text = _extract_readable_html(html)
+    title = extracted_title or current_url
+    text = extracted_text[:_MAX_EXTRACTION_LENGTH]
 
     return ExtractedContent(
         title=title,

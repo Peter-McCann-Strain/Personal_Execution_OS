@@ -13,6 +13,11 @@ releases.
   without treating unmerged automation branches as release commits.
 - Removed hidden Redis and PostgreSQL dependencies from mocked backend tests,
   so clean CI runners and developer machines exercise the same boundaries.
+- Replaced regex-based HTML cleanup with a parser, stopped runtime-stream
+  errors from returning internal exception text, and grouped invalid API-key
+  attempts without storing credential-derived hashes.
+- Removed redundant shortcut-string replacements and another import-order
+  dependency from isolated handler tests.
 
 ## 0.1.1 - 2026-08-02
 
