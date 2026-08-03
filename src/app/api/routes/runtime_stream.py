@@ -237,12 +237,12 @@ async def runtime_stream(
                     )
                     emitted_events += 1
                     elapsed_since_heartbeat_ms = 0
-            except Exception as exc:
+            except Exception:
                 logger.warning("runtime_stream_snapshot_failed", exc_info=True)
                 yield _sse_event(
                     "runtime_error",
                     {
-                        "message": str(exc),
+                        "message": "Runtime updates are temporarily unavailable.",
                         "generated_at": datetime.now(UTC).isoformat(),
                     },
                 )

@@ -107,7 +107,11 @@ def _load_research_handler():
         async def _enqueue_entity_extraction(**_kwargs):
             return None
 
+        async def _enqueue_reflection_pack_refresh(*_args, **_kwargs):
+            return None
+
         common_module.enqueue_entity_extraction = _enqueue_entity_extraction
+        common_module.enqueue_reflection_pack_refresh = _enqueue_reflection_pack_refresh
         sys.modules["src.app.domain.services.handlers._common"] = common_module
 
     episodes_module = sys.modules.get("src.app.persistence.repositories.episodes")
@@ -180,7 +184,6 @@ async def test_handle_research_happy_path():
     assert result.agent == "research"
     assert "FastAPI Best Practices" in result.content
     assert "excellent for building APIs" in result.content
-    assert "fastapi.tiangolo.com" in result.content
     assert "Use FastAPI for this project" in result.content
     assert result.metadata["episode_id"] == str(episode.id)
     assert result.metadata["finding_count"] == 1

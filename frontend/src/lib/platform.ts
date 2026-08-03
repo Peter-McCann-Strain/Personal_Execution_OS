@@ -9,11 +9,7 @@ export function formatShortcut(key: string): string {
       .replace("Shift", "\u21E7")
       .replace("Ctrl", "\u2303");
   }
-  return key
-    .replace("Mod", "Ctrl")
-    .replace("Alt", "Alt")
-    .replace("Shift", "Shift")
-    .replace("Ctrl", "Ctrl");
+  return key.replace("Mod", "Ctrl");
 }
 
 export const MOD_KEY = isMac ? "\u2318" : "Ctrl";

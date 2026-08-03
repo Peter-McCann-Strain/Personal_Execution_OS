@@ -91,3 +91,26 @@ async def test_runtime_stream_emits_initial_snapshot() -> None:
     assert "event: runtime_open" in combined
     assert "event: runtime_snapshot" in combined
     assert '"pending_approval_count":1' in combined
+
+
+async def test_runtime_stream_does_not_expose_internal_exception_details() -> None:
+    mock_session = AsyncMock()
+    app = _build_app(mock_session)
+
+    with patch(
+        "src.app.api.routes.runtime_stream._build_runtime_stream_snapshot",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("database password appeared in an internal error"),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with client.stream(
+                "GET",
+                "/api/runtime/stream",
+                params={"poll_interval_ms": 250, "max_events": 2},
+            ) as response:
+                body = "".join([chunk async for chunk in response.aiter_text()])
+
+    assert response.status_code == 200
+    assert "event: runtime_error" in body
+    assert "Runtime updates are temporarily unavailable." in body
+    assert "database password" not in body

@@ -4,7 +4,7 @@ Production uses a Redis sliding window so limits are shared across workers.
 Tests, and local/dev Redis outages, fall back to the in-process counter.
 """
 
-import hashlib
+import hmac
 import inspect
 import threading
 import time
@@ -227,8 +227,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Check for API key-based requests
         api_key = request.headers.get("X-API-Key")
         if api_key:
-            credential_digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:24]
-            key = f"api:{credential_digest}"
+            from src.app.config import get_settings
+
+            configured_api_key = get_settings().chat_api_key.get_secret_value()
+            client_host = request.client.host if request.client else "unknown"
+            key = (
+                "api:authenticated"
+                if configured_api_key
+                and hmac.compare_digest(
+                    api_key.encode("utf-8"),
+                    configured_api_key.encode("utf-8"),
+                )
+                else f"api-invalid:{client_host}"
+            )
             limit = api_key_limit
             window = api_key_window
 
