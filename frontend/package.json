@@ -81,7 +81,7 @@
     "lint-staged": "^16.2.5",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.3.3",
-    "typescript": "~5.9.3",
+    "typescript": "~7.0.2",
     "typescript-eslint": "^8.65.0",
     "vite": "^7.3.6",
     "vitest": "^4.1.10"
