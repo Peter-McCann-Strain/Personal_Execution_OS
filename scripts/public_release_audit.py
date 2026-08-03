@@ -395,7 +395,7 @@ def _git_metadata_findings(root: Path, deny_terms: list[str]) -> list[Finding]:
             "-C",
             str(root),
             "log",
-            "--all",
+            "HEAD",
             "--format=%H%x00%an%x00%ae%x00%cn%x00%ce",
         ],
         check=False,
@@ -496,7 +496,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--git-metadata",
         action="store_true",
-        help="Audit author and committer metadata in all Git revisions.",
+        help="Audit author and committer metadata in revisions reachable from HEAD.",
     )
     parser.add_argument("--json", action="store_true", help="Emit redacted JSON.")
     return parser.parse_args(argv)

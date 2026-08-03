@@ -7,6 +7,11 @@ releases.
 
 ## Unreleased
 
+### Fixed
+
+- Made the secret and privacy release gates cover the published history
+  without treating unmerged automation branches as release commits.
+
 ## 0.1.1 - 2026-08-02
 
 ### Added

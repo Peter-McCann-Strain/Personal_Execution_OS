@@ -39,6 +39,10 @@ directory. Run the tree audit without `--git-metadata`; run the history,
 identity, status, and pre-commit checks in the clean clone that produced the
 archive.
 
+The metadata audit follows the history reachable from `HEAD`. An unmerged
+remote or automation branch is not part of the candidate release; check a
+different candidate by checking out its proposed commit first.
+
 The full privacy audit intentionally inspects ignored files. If it reports a
 generated coverage file or browser report, remove that generated output from
 the release workspace and run the audit again. Do not suppress a finding merely
