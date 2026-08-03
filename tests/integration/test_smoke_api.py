@@ -50,10 +50,21 @@ async def test_smoke_api_runs_against_real_app_routes(integration_client, monkey
         },
     )
 
-    with patch(
-        "src.app.api.routes.chat.process_message",
-        new_callable=AsyncMock,
-        return_value=mock_response,
+    with (
+        patch(
+            "src.app.api.routes.chat.process_message",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ),
+        patch(
+            "src.app.api.routes.chat._get_conversation_context",
+            return_value=None,
+        ),
+        patch(
+            "src.app.api.routes.chat._retrieve_supporting_context",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         results = await run_smoke_checks(_make_args())
 

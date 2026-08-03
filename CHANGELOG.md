@@ -11,6 +11,8 @@ releases.
 
 - Made the secret and privacy release gates cover the published history
   without treating unmerged automation branches as release commits.
+- Removed hidden Redis and PostgreSQL dependencies from mocked backend tests,
+  so clean CI runners and developer machines exercise the same boundaries.
 
 ## 0.1.1 - 2026-08-02
 

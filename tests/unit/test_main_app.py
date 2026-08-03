@@ -462,6 +462,10 @@ class TestLifespan:
             patch("src.app.main.init_session_factory", return_value=mock_session_factory),
             patch("src.app.main.close_engine", new=mock_close),
             patch("src.app.main.AsyncAnthropic", return_value=mock_anthropic),
+            patch(
+                "src.app.main.run_startup_preflight",
+                new=AsyncSpy(result=SimpleNamespace(status="ok", checks=[])),
+            ),
             patch("src.app.main.set_bot_and_dispatcher"),
             patch.dict(
                 "sys.modules",

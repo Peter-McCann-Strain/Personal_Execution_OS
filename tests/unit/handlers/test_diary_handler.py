@@ -105,8 +105,12 @@ def _load_diary_handler():
         async def _enqueue_commitment_extraction(**_kwargs):
             return None
 
+        async def _enqueue_reflection_pack_refresh(*_args, **_kwargs):
+            return None
+
         common_module.enqueue_entity_extraction = _enqueue_entity_extraction
         common_module.enqueue_commitment_extraction = _enqueue_commitment_extraction
+        common_module.enqueue_reflection_pack_refresh = _enqueue_reflection_pack_refresh
         sys.modules["src.app.domain.services.handlers._common"] = common_module
 
     episodes_module = sys.modules.get("src.app.persistence.repositories.episodes")
@@ -188,6 +192,16 @@ async def test_handle_diary_happy_path():
         ) as mock_enqueue,
         patch.object(
             diary,
+            "enqueue_commitment_extraction",
+            new_callable=AsyncMock,
+        ) as mock_commitment_enqueue,
+        patch.object(
+            diary,
+            "enqueue_reflection_pack_refresh",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            diary,
             "_run_second_brain_enrichment",
             new_callable=AsyncMock,
             return_value={},
@@ -206,6 +220,10 @@ async def test_handle_diary_happy_path():
     mock_create.assert_awaited_once()
     mock_session.commit.assert_awaited_once()
     mock_enqueue.assert_awaited_once_with(
+        episode_id=str(episode.id),
+        text_content=entry.content,
+    )
+    mock_commitment_enqueue.assert_awaited_once_with(
         episode_id=str(episode.id),
         text_content=entry.content,
     )
@@ -285,6 +303,16 @@ async def test_handle_diary_enqueue_success():
         ),
         patch.object(
             diary,
+            "enqueue_commitment_extraction",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            diary,
+            "enqueue_reflection_pack_refresh",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            diary,
             "_run_second_brain_enrichment",
             new_callable=AsyncMock,
             return_value={},
@@ -326,6 +354,11 @@ async def test_handle_diary_includes_enrichment_metadata():
         patch.object(
             diary,
             "enqueue_commitment_extraction",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            diary,
+            "enqueue_reflection_pack_refresh",
             new_callable=AsyncMock,
         ),
         patch.object(
