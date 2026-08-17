@@ -1,5 +1,5 @@
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
-FROM python:3.12.13-alpine3.23@sha256:601d3d3797e90e2534782e69c85fafb7971b43f24c7b1b079b7e48dd435e458d AS builder
+FROM python:3.14.7-alpine3.23@sha256:6b8f06d04d5305c1d1288435388df9165ab41e681fae6439d6349d8053cc3f83 AS builder
 
 # Install uv from the official image (pinned for reproducibility)
 COPY --from=ghcr.io/astral-sh/uv:0.12.0@sha256:606e70c71c852d03f611b1e56a195d08648507018a7057fab82c4974c4eae105 /uv /usr/local/bin/uv
@@ -21,7 +21,7 @@ COPY config/ config/
 COPY data/ data/
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
-FROM python:3.12.13-alpine3.23@sha256:601d3d3797e90e2534782e69c85fafb7971b43f24c7b1b079b7e48dd435e458d
+FROM python:3.14.7-alpine3.23@sha256:6b8f06d04d5305c1d1288435388df9165ab41e681fae6439d6349d8053cc3f83
 
 ARG APP_VERSION=0.1.1
 ARG SOURCE_REPOSITORY_URL=https://github.com/Peter-McCann-Strain/Personal_Execution_OS
