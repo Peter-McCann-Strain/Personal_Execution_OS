@@ -13,7 +13,7 @@ ENV VITE_SOURCE_REPOSITORY_URL=$VITE_SOURCE_REPOSITORY_URL
 RUN npm run build
 
 # ─── Stage 2: Non-root static server + API proxy ──────────────────────────────
-FROM nginxinc/nginx-unprivileged:1.30.4-alpine3.24@sha256:44e36330f74d4f3a1d4e222acca9e23b401fb87811a7597024502bb759c4dd49
+FROM nginxinc/nginx-unprivileged:1.31.6-alpine3.24@sha256:b54ac358b83fc6c965793fd271839b4ea4cdb6e99895bb19618cbc2ca152d972
 
 ARG APP_VERSION=0.1.1
 ARG SOURCE_REPOSITORY_URL=https://github.com/Peter-McCann-Strain/Personal_Execution_OS
